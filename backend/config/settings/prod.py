@@ -4,7 +4,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .base import *  # noqa: F401,F403
+from . import base as base_settings
+
+globals().update({name: getattr(base_settings, name) for name in base_settings.__all__})
+
+BASE_DIR = base_settings.BASE_DIR
+ALLOWED_HOSTS = base_settings.ALLOWED_HOSTS
+CSRF_TRUSTED_ORIGINS = base_settings.CSRF_TRUSTED_ORIGINS
+env_bool = base_settings.env_bool
+env_int = base_settings.env_int
+LOGGING = base_settings.LOGGING
+LOG_LEVEL = base_settings.LOG_LEVEL
 
 DEBUG = False
 

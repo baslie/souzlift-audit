@@ -1,7 +1,14 @@
 """Development settings for the «Союзлифт Аудит» project."""
 from __future__ import annotations
 
-from .base import *  # noqa: F401,F403
+from . import base as base_settings
+
+globals().update({name: getattr(base_settings, name) for name in base_settings.__all__})
+
+env_bool = base_settings.env_bool
+ALLOWED_HOSTS = base_settings.ALLOWED_HOSTS
+LOGGING = base_settings.LOGGING
+LOG_LEVEL = base_settings.LOG_LEVEL
 
 DEBUG = env_bool("DJANGO_DEBUG", True)
 
