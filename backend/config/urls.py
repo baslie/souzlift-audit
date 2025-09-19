@@ -8,6 +8,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from audits.api import CatalogSnapshotView, OfflineSyncView
+from config.views import ServiceWorkerView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -20,6 +21,7 @@ urlpatterns = [
         CatalogSnapshotView.as_view(),
         name="catalog-snapshot",
     ),
+    path("service-worker.js", ServiceWorkerView.as_view(), name="service-worker"),
     path("", RedirectView.as_view(pattern_name="accounts:dashboard", permanent=False), name="home"),
 ]
 

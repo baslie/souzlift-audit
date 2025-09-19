@@ -10,6 +10,7 @@
         ELEVATORS: "catalog_elevators",
         OBJECT_FIELDS: "object_info_fields",
         META: "catalog_meta",
+        CATALOG_ADDITIONS: "offline_catalog_additions",
       };
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -21,7 +22,10 @@
   class ObjectInfoForm {
     constructor(root) {
       this.root = root;
-      this.clientId = root.dataset.clientId || "";
+      this.clientId = resolveClientId(root);
+      if (this.clientId) {
+        this.root.dataset.clientId = this.clientId;
+      }
       this.catalogUrl = root.dataset.catalogUrl || "";
       this.listUrl = root.dataset.listUrl || "";
 
@@ -157,7 +161,10 @@
       if (this.saveButton) {
         this.saveButton.addEventListener("click", (event) => {
           event.preventDefault();
-          this.handleSave();
+          this.handleSave().catch((error) => {
+            console.error("Failed to persist object info", error);
+            this.showError("Не удалось сохранить данные. Попробуйте ещё раз.");
+          });
         });
       }
 
@@ -227,6 +234,7 @@
       }
       const identifier = this.clientId || Offline.generateClientId();
       this.clientId = identifier;
+      this.root.dataset.clientId = identifier;
       let record = await Offline.getRecord(this.db, STORES.AUDITS, identifier);
       if (!record) {
         record = this.createEmptyRecord(identifier);
@@ -556,7 +564,7 @@
       }
     }
 
-    handleSave() {
+    async handleSave() {
       if (!this.db || !Offline) {
         this.showError("Локальное хранилище недоступно. Сохранение невозможно.");
         return;
@@ -581,18 +589,20 @@
       this.record.elevator = result.elevatorLabel;
       this.record.note = result.note;
       this.record.objectInfo = result.objectInfo;
+      this.record.manualBuilding = result.manualBuilding || null;
+      this.record.manualElevator = result.manualElevator || null;
       if (result.catalogGeneratedAt) {
         this.record.catalogGeneratedAt = result.catalogGeneratedAt;
       }
 
-      Offline.putRecord(this.db, STORES.AUDITS, this.record)
-        .then(() => {
-          this.showStatus("Черновик сохранён.");
-        })
-        .catch((error) => {
-          console.error("Failed to persist offline record", error);
-          this.showError("Не удалось сохранить данные. Попробуйте ещё раз.");
-        });
+      try {
+        await Offline.putRecord(this.db, STORES.AUDITS, this.record);
+        await this.persistManualEntries(result);
+        this.showStatus("Черновик сохранён.");
+      } catch (error) {
+        console.error("Failed to persist offline record", error);
+        this.showError("Не удалось сохранить данные. Попробуйте ещё раз.");
+      }
     }
 
     collectFormValues() {
@@ -639,6 +649,8 @@
         elevatorId,
         buildingLabel,
         elevatorLabel,
+        manualBuilding,
+        manualElevator,
         note,
         objectInfo,
         catalogGeneratedAt: this.catalogGeneratedAt,
@@ -716,6 +728,68 @@
         objectInfo: {},
       };
     }
+
+    async persistManualEntries(result) {
+      if (!this.db || !Offline || !this.record || !this.record.clientId) {
+        return;
+      }
+      const clientId = this.record.clientId;
+      const now = new Date().toISOString();
+
+      if (result.manualBuilding) {
+        const recordId = `${clientId}:building`;
+        let existing = null;
+        try {
+          existing = await Offline.getRecord(this.db, STORES.CATALOG_ADDITIONS, recordId);
+        } catch (error) {
+          existing = null;
+        }
+        const payload = {
+          id: recordId,
+          clientId,
+          type: "building",
+          payload: {
+            label: result.manualBuilding,
+            note: result.note || "",
+          },
+          relatedBuildingId: result.buildingId || null,
+          relatedElevatorId: result.elevatorId || null,
+          createdAt: existing?.createdAt || existing?.updatedAt || now,
+          updatedAt: now,
+        };
+        await Offline.putRecord(this.db, STORES.CATALOG_ADDITIONS, payload);
+      } else {
+        await Offline.deleteRecord(this.db, STORES.CATALOG_ADDITIONS, `${clientId}:building`).catch(() => undefined);
+      }
+
+      if (result.manualElevator) {
+        const recordId = `${clientId}:elevator`;
+        let existing = null;
+        try {
+          existing = await Offline.getRecord(this.db, STORES.CATALOG_ADDITIONS, recordId);
+        } catch (error) {
+          existing = null;
+        }
+        const payload = {
+          id: recordId,
+          clientId,
+          type: "elevator",
+          payload: {
+            label: result.manualElevator,
+            buildingId: result.buildingId || null,
+            buildingLabel: result.buildingLabel || "",
+            note: result.note || "",
+          },
+          relatedBuildingId: result.buildingId || null,
+          relatedElevatorId: result.elevatorId || null,
+          createdAt: existing?.createdAt || existing?.updatedAt || now,
+          updatedAt: now,
+        };
+        await Offline.putRecord(this.db, STORES.CATALOG_ADDITIONS, payload);
+      } else {
+        await Offline.deleteRecord(this.db, STORES.CATALOG_ADDITIONS, `${clientId}:elevator`).catch(() => undefined);
+      }
+    }
   }
 
   function readJsonScript(elementId) {
@@ -783,5 +857,19 @@
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  function resolveClientId(root) {
+    if (root && root.dataset && root.dataset.clientId) {
+      return root.dataset.clientId;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const raw = params.get("client_id");
+      return raw ? raw.trim() : "";
+    } catch (error) {
+      console.warn("Failed to read client_id from URL", error);
+      return "";
+    }
   }
 })(window);

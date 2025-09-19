@@ -29,7 +29,10 @@
   class ChecklistForm {
     constructor(root) {
       this.root = root;
-      this.clientId = root.dataset.clientId || "";
+      this.clientId = resolveClientId(root);
+      if (this.clientId) {
+        this.root.dataset.clientId = this.clientId;
+      }
       this.maxPerResponse = parseInt(root.dataset.maxPerResponse || "10", 10);
       this.maxPerAudit = parseInt(root.dataset.maxPerAudit || "100", 10);
       this.maxSizeBytes = parseInt(root.dataset.maxSize || String(8 * 1024 * 1024), 10);
@@ -666,6 +669,20 @@
         })
       );
       this.dispatchFormChange(state);
+    }
+  }
+
+  function resolveClientId(root) {
+    if (root && root.dataset && root.dataset.clientId) {
+      return root.dataset.clientId;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const raw = params.get("client_id");
+      return raw ? raw.trim() : "";
+    } catch (error) {
+      console.warn("Failed to read client_id from URL", error);
+      return "";
     }
   }
 })(window);
