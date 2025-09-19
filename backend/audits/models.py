@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Final
+from datetime import date, datetime
+from typing import Any, Final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -17,6 +17,36 @@ from .tokens import build_attachment_token
 MAX_ATTACHMENT_SIZE_BYTES: Final[int] = 8 * 1024 * 1024
 MAX_ATTACHMENTS_PER_RESPONSE: Final[int] = 10
 MAX_ATTACHMENTS_PER_AUDIT: Final[int] = 100
+
+
+def _consume_log_actor(instance: object) -> Any | None:
+    """Return and clear actor attached to instance for logging purposes."""
+
+    actor = getattr(instance, "_log_actor", None)
+    if actor is not None:
+        try:
+            delattr(instance, "_log_actor")
+        except AttributeError:
+            pass
+    return actor
+
+
+def _serialize_datetime(value: datetime | None) -> str | None:
+    """Serialize datetime values to ISO 8601 for JSON payloads."""
+
+    if value is None:
+        return None
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, timezone.get_current_timezone())
+    return value.isoformat()
+
+
+def _serialize_date(value: date | None) -> str | None:
+    """Serialize dates to ISO 8601 for JSON payloads."""
+
+    if value is None:
+        return None
+    return value.isoformat()
 
 
 @dataclass(frozen=True)
@@ -209,6 +239,7 @@ class Audit(models.Model):
         previous_status: str | None = None
         previous_started_at: datetime | None = None
         previous_finished_at: datetime | None = None
+        status_related_changes: set[str] = set()
 
         if self.pk and should_check_status:
             persisted = (
@@ -222,43 +253,84 @@ class Audit(models.Model):
                 previous_finished_at = persisted.finished_at
 
         if should_check_status:
-            changed_fields = self._prepare_status_transition(
+            status_related_changes = self._prepare_status_transition(
                 previous_status,
                 previous_started_at=previous_started_at,
                 previous_finished_at=previous_finished_at,
             )
-            if update_fields is not None and changed_fields:
-                update_fields.update(changed_fields)
+            if update_fields is not None and status_related_changes:
+                update_fields.update(status_related_changes)
 
         if update_fields is not None:
             kwargs["update_fields"] = sorted(update_fields)
 
+        is_creation = self.pk is None
+        status_changed = previous_status is not None and self.status != previous_status
+
         super().save(*args, **kwargs)
 
-    def start(self, *, commit: bool = True) -> None:
+        log_actor = _consume_log_actor(self)
+
+        if is_creation:
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.AUDIT_CREATED,
+                entity=self,
+                user=log_actor or getattr(self, "created_by", None),
+                payload={
+                    "status": self.status,
+                    "elevator_id": self.elevator_id,
+                    "planned_date": _serialize_date(self.planned_date),
+                    "started_at": _serialize_datetime(self.started_at),
+                    "finished_at": _serialize_datetime(self.finished_at),
+                },
+            )
+        elif status_changed:
+            payload: dict[str, Any] = {
+                "from": previous_status,
+                "to": self.status,
+            }
+            if "started_at" in status_related_changes:
+                payload["started_at"] = _serialize_datetime(self.started_at)
+            if "finished_at" in status_related_changes:
+                payload["finished_at"] = _serialize_datetime(self.finished_at)
+
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.AUDIT_STATUS_CHANGED,
+                entity=self,
+                user=log_actor,
+                payload=payload,
+            )
+
+    def start(self, *, actor: object | None = None, commit: bool = True) -> None:
         """Перевести аудит в статус «В работе» и зафиксировать время старта."""
 
         self.status = self.Status.IN_PROGRESS
+        if actor is not None:
+            self._log_actor = actor
         if commit:
             if self.pk is None:
                 self.save()
             else:
                 self.save(update_fields=["status"])
 
-    def submit(self, *, commit: bool = True) -> None:
+    def submit(self, *, actor: object | None = None, commit: bool = True) -> None:
         """Перевести аудит в статус «Отправлен» и зафиксировать завершение."""
 
         self.status = self.Status.SUBMITTED
+        if actor is not None:
+            self._log_actor = actor
         if commit:
             if self.pk is None:
                 self.save()
             else:
                 self.save(update_fields=["status"])
 
-    def mark_reviewed(self, *, commit: bool = True) -> None:
+    def mark_reviewed(self, *, actor: object | None = None, commit: bool = True) -> None:
         """Отметить аудит как просмотренный администратором."""
 
         self.status = self.Status.REVIEWED
+        if actor is not None:
+            self._log_actor = actor
         if commit:
             if self.pk is None:
                 self.save()
@@ -360,15 +432,56 @@ class AuditResponse(models.Model):
         else:
             update_fields = set(update_fields_param)
 
+        creating = self.pk is None
+        previous_state: dict[str, Any] | None = None
         previous_audit_id: int | None = None
-        if self.pk:
-            previous_audit = (
-                AuditResponse.objects.only("audit_id").filter(pk=self.pk).first()
+        if not creating and self.pk:
+            previous_state = (
+                AuditResponse.objects.filter(pk=self.pk)
+                .values("audit_id", "score", "comment", "is_flagged")
+                .first()
             )
-            if previous_audit is not None:
-                previous_audit_id = previous_audit.audit_id
+            if previous_state is not None:
+                previous_audit_id = int(previous_state.get("audit_id") or 0) or None
 
         super().save(*args, **kwargs)
+
+        log_actor = _consume_log_actor(self)
+        if creating:
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.RESPONSE_CREATED,
+                entity=self,
+                user=log_actor or getattr(self.audit, "created_by", None),
+                payload={
+                    "audit_id": self.audit_id,
+                    "question_id": self.question_id,
+                    "score": self.score,
+                    "is_flagged": self.is_flagged,
+                },
+            )
+        else:
+            changes: dict[str, Any] = {}
+            if previous_state is not None:
+                for field in ("score", "comment", "is_flagged"):
+                    previous_value = previous_state.get(field)
+                    current_value = getattr(self, field)
+                    if previous_value != current_value:
+                        changes[field] = {
+                            "from": previous_value,
+                            "to": current_value,
+                        }
+
+            if changes:
+                AuditLogEntry.objects.log_action(
+                    action=AuditLogEntry.Action.RESPONSE_UPDATED,
+                    entity=self,
+                    user=log_actor or getattr(self.audit, "created_by", None),
+                    payload={
+                        "audit_id": self.audit_id,
+                        "question_id": self.question_id,
+                        "changes": changes,
+                    },
+                )
 
         if previous_audit_id and previous_audit_id != self.audit_id:
             Audit.recalculate_total_score_for(previous_audit_id)
@@ -382,7 +495,21 @@ class AuditResponse(models.Model):
     def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
         audit = self.audit
         audit_id = self.audit_id
+        response_id = self.pk
+        payload = {
+            "audit_id": audit_id,
+            "question_id": self.question_id,
+            "score": self.score,
+        }
+        log_actor = _consume_log_actor(self)
         result = super().delete(*args, **kwargs)
+        if response_id is not None:
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.RESPONSE_DELETED,
+                entity=(self._meta.label_lower, response_id),
+                user=log_actor or getattr(audit, "created_by", None),
+                payload=payload,
+            )
         if audit_id:
             audit.recalculate_total_score()
         return result
@@ -499,12 +626,85 @@ class AuditAttachment(models.Model):
             raise ValidationError(errors)
 
     def save(self, *args: object, **kwargs: object) -> None:
+        creating = self._state.adding
+        previous_state: dict[str, Any] | None = None
+        if not creating and self.pk:
+            previous_state = (
+                AuditAttachment.objects.filter(pk=self.pk)
+                .values("caption", "stored_size", "file")
+                .first()
+            )
+
         self.full_clean()
         if self.file and hasattr(self.file, "size"):
             self.stored_size = int(self.file.size)
         else:
             self.stored_size = 0
         super().save(*args, **kwargs)
+
+        log_actor = _consume_log_actor(self)
+        fallback_actor = getattr(self.response.audit, "created_by", None)
+
+        if creating:
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.ATTACHMENT_CREATED,
+                entity=self,
+                user=log_actor or fallback_actor,
+                payload={
+                    "response_id": self.response_id,
+                    "filename": self.file.name,
+                    "stored_size": self.stored_size,
+                },
+            )
+        else:
+            changes: dict[str, Any] = {}
+            if previous_state is not None:
+                if previous_state.get("caption") != self.caption:
+                    changes["caption"] = {
+                        "from": previous_state.get("caption"),
+                        "to": self.caption,
+                    }
+                previous_file = previous_state.get("file")
+                if previous_file != self.file.name:
+                    changes["file"] = {
+                        "from": previous_file,
+                        "to": self.file.name,
+                    }
+                previous_size = previous_state.get("stored_size")
+                if previous_size != self.stored_size:
+                    changes["stored_size"] = {
+                        "from": previous_size,
+                        "to": self.stored_size,
+                    }
+
+            if changes:
+                AuditLogEntry.objects.log_action(
+                    action=AuditLogEntry.Action.ATTACHMENT_UPDATED,
+                    entity=self,
+                    user=log_actor or fallback_actor,
+                    payload={
+                        "response_id": self.response_id,
+                        "changes": changes,
+                    },
+                )
+
+    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+        attachment_id = self.pk
+        payload = {
+            "response_id": self.response_id,
+            "filename": self.file.name,
+            "stored_size": self.stored_size,
+        }
+        log_actor = _consume_log_actor(self)
+        result = super().delete(*args, **kwargs)
+        if attachment_id is not None:
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.ATTACHMENT_DELETED,
+                entity=(self._meta.label_lower, attachment_id),
+                user=log_actor or fallback_actor,
+                payload=payload,
+            )
+        return result
 
 
 def signature_upload_to(instance: "AuditSignature", filename: str) -> str:
@@ -546,3 +746,171 @@ class AuditSignature(models.Model):
 
     def __str__(self) -> str:
         return f"Signature for audit {self.audit_id}"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        creating = self._state.adding
+        previous_state: dict[str, Any] | None = None
+        if not creating and self.pk:
+            previous_state = (
+                AuditSignature.objects.filter(pk=self.pk)
+                .values("signed_by", "signed_at")
+                .first()
+            )
+
+        super().save(*args, **kwargs)
+
+        log_actor = _consume_log_actor(self)
+        fallback_actor = getattr(self.audit, "created_by", None)
+
+        if creating:
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.SIGNATURE_CREATED,
+                entity=self,
+                user=log_actor or fallback_actor,
+                payload={
+                    "audit_id": self.audit_id,
+                    "signed_by": self.signed_by,
+                    "signed_at": _serialize_datetime(self.signed_at),
+                },
+            )
+        else:
+            changes: dict[str, Any] = {}
+            if previous_state is not None:
+                if previous_state.get("signed_by") != self.signed_by:
+                    changes["signed_by"] = {
+                        "from": previous_state.get("signed_by"),
+                        "to": self.signed_by,
+                    }
+                previous_signed_at = previous_state.get("signed_at")
+                if previous_signed_at != self.signed_at:
+                    changes["signed_at"] = {
+                        "from": _serialize_datetime(previous_signed_at),
+                        "to": _serialize_datetime(self.signed_at),
+                    }
+
+            if changes:
+                AuditLogEntry.objects.log_action(
+                    action=AuditLogEntry.Action.SIGNATURE_UPDATED,
+                    entity=self,
+                    user=log_actor or fallback_actor,
+                    payload={
+                        "audit_id": self.audit_id,
+                        "changes": changes,
+                    },
+                )
+
+    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+        signature_id = self.pk
+        payload = {
+            "audit_id": self.audit_id,
+            "signed_by": self.signed_by,
+            "signed_at": _serialize_datetime(self.signed_at),
+        }
+        log_actor = _consume_log_actor(self)
+        fallback_actor = getattr(self.audit, "created_by", None)
+        result = super().delete(*args, **kwargs)
+        if signature_id is not None:
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.SIGNATURE_DELETED,
+                entity=(self._meta.label_lower, signature_id),
+                user=log_actor or fallback_actor,
+                payload=payload,
+            )
+        return result
+
+
+class AuditLogEntryManager(models.Manager["AuditLogEntry"]):
+    """Custom manager that simplifies writing audit trail records."""
+
+    def log_action(
+        self,
+        *,
+        action: str,
+        entity: models.Model | tuple[str, object | None],
+        user: Any | None = None,
+        payload: Any | None = None,
+    ) -> "AuditLogEntry":
+        if isinstance(entity, models.Model):
+            entity_type = entity._meta.label_lower
+            entity_id = getattr(entity, "pk", None)
+        else:
+            entity_type, entity_id = entity
+
+        return self.create(
+            user=user if isinstance(user, models.Model) else None,
+            action=action,
+            entity_type=entity_type,
+            entity_id=str(entity_id) if entity_id is not None else "",
+            payload=payload or {},
+        )
+
+
+class AuditLogEntry(models.Model):
+    """История ключевых действий пользователей в системе аудитов."""
+
+    class Action(models.TextChoices):
+        AUDIT_CREATED = "audit.created", _("Аудит создан")
+        AUDIT_STATUS_CHANGED = "audit.status_changed", _("Статус аудита изменён")
+        RESPONSE_CREATED = "response.created", _("Ответ добавлен")
+        RESPONSE_UPDATED = "response.updated", _("Ответ обновлён")
+        RESPONSE_DELETED = "response.deleted", _("Ответ удалён")
+        ATTACHMENT_CREATED = "attachment.created", _("Вложение добавлено")
+        ATTACHMENT_UPDATED = "attachment.updated", _("Вложение обновлено")
+        ATTACHMENT_DELETED = "attachment.deleted", _("Вложение удалено")
+        SIGNATURE_CREATED = "signature.created", _("Подпись добавлена")
+        SIGNATURE_UPDATED = "signature.updated", _("Подпись обновлена")
+        SIGNATURE_DELETED = "signature.deleted", _("Подпись удалена")
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_log_entries",
+        verbose_name=_("Пользователь"),
+        help_text=_("Кто инициировал действие."),
+    )
+    action = models.CharField(
+        _("Действие"),
+        max_length=50,
+        choices=Action.choices,
+        help_text=_("Тип события."),
+    )
+    entity_type = models.CharField(
+        _("Тип сущности"),
+        max_length=100,
+        help_text=_("Полное имя модели, к которой относится событие."),
+    )
+    entity_id = models.CharField(
+        _("Идентификатор сущности"),
+        max_length=64,
+        blank=True,
+        help_text=_("Первичный ключ записи или временный идентификатор."),
+    )
+    payload = models.JSONField(
+        _("Данные"),
+        blank=True,
+        default=dict,
+        help_text=_("Дополнительная информация о событии."),
+    )
+    created_at = models.DateTimeField(
+        _("Создано"),
+        auto_now_add=True,
+        help_text=_("Время фиксации события."),
+    )
+
+    objects = AuditLogEntryManager()
+
+    class Meta:
+        verbose_name = _("Запись журнала аудита")
+        verbose_name_plural = _("Журнал аудита")
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["entity_type", "entity_id"]),
+            models.Index(fields=["action"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.created_at:%Y-%m-%d %H:%M:%S} — {self.action}"
+
