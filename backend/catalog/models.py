@@ -266,3 +266,236 @@ class Elevator(ModerationMixin, models.Model):
 
     def __str__(self) -> str:
         return f"{self.identifier} ({self.building})"
+
+
+class ChecklistCategory(models.Model):
+    """Группа вопросов чек-листа с собственным порядком."""
+
+    code = models.SlugField(
+        _("Код"),
+        max_length=50,
+        unique=True,
+        help_text=_("Уникальный идентификатор для ссылок и импорта."),
+    )
+    name = models.CharField(
+        _("Название"),
+        max_length=255,
+        help_text=_("Отображаемое имя категории."),
+    )
+    order = models.PositiveIntegerField(
+        _("Порядок"),
+        default=0,
+        help_text=_("Используется для сортировки категорий в интерфейсе."),
+    )
+
+    class Meta:
+        verbose_name = _("Категория чек-листа")
+        verbose_name_plural = _("Категории чек-листа")
+        ordering = ["order", "name"]
+        indexes = [models.Index(fields=["order"])]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ChecklistSection(models.Model):
+    """Логический блок вопросов внутри категории."""
+
+    category = models.ForeignKey(
+        "catalog.ChecklistCategory",
+        on_delete=models.CASCADE,
+        related_name="sections",
+        verbose_name=_("Категория"),
+        help_text=_("Категория, к которой относится секция."),
+    )
+    title = models.CharField(
+        _("Название"),
+        max_length=255,
+        help_text=_("Заголовок секции в чек-листе."),
+    )
+    description = models.TextField(
+        _("Описание"),
+        blank=True,
+        help_text=_("Дополнительные инструкции для аудитора."),
+    )
+    order = models.PositiveIntegerField(
+        _("Порядок"),
+        default=0,
+        help_text=_("Определяет расположение секции внутри категории."),
+    )
+
+    class Meta:
+        verbose_name = _("Секция чек-листа")
+        verbose_name_plural = _("Секции чек-листа")
+        ordering = ["order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["category", "order"],
+                name="unique_section_order_per_category",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class ChecklistQuestion(models.Model):
+    """Конкретный вопрос чек-листа с параметрами оценки."""
+
+    class QuestionType(models.TextChoices):
+        SCORE = "score", _("Балльный")
+        BOOLEAN = "boolean", _("Да/Нет")
+        TEXT = "text", _("Текстовый")
+
+    section = models.ForeignKey(
+        "catalog.ChecklistSection",
+        on_delete=models.CASCADE,
+        related_name="questions",
+        verbose_name=_("Секция"),
+        help_text=_("Секция, в которой отображается вопрос."),
+    )
+    text = models.TextField(
+        _("Формулировка"),
+        help_text=_("Текст вопроса, отображаемый аудитору."),
+    )
+    type = models.CharField(
+        _("Тип вопроса"),
+        max_length=20,
+        choices=QuestionType.choices,
+        default=QuestionType.SCORE,
+        help_text=_("Определяет формат ответа."),
+    )
+    max_score = models.PositiveIntegerField(
+        _("Максимальный балл"),
+        default=0,
+        help_text=_("Используется для балльных вопросов."),
+    )
+    order = models.PositiveIntegerField(
+        _("Порядок"),
+        default=0,
+        help_text=_("Позиция вопроса внутри секции."),
+    )
+    guideline = models.TextField(
+        _("Подсказка"),
+        blank=True,
+        help_text=_("Инструкции или критерии оценки."),
+    )
+    requires_comment = models.BooleanField(
+        _("Комментарий обязателен"),
+        default=False,
+        help_text=_("Требовать комментарий независимо от выбранного балла."),
+    )
+
+    class Meta:
+        verbose_name = _("Вопрос чек-листа")
+        verbose_name_plural = _("Вопросы чек-листа")
+        ordering = ["order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["section", "order"],
+                name="unique_question_order_per_section",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.text
+
+
+class ScoreOption(models.Model):
+    """Доступный вариант ответа для балльного вопроса."""
+
+    question = models.ForeignKey(
+        "catalog.ChecklistQuestion",
+        on_delete=models.CASCADE,
+        related_name="score_options",
+        verbose_name=_("Вопрос"),
+        help_text=_("Вопрос, к которому относится вариант."),
+    )
+    score = models.PositiveIntegerField(
+        _("Баллы"),
+        help_text=_("Количество баллов за выбранный вариант."),
+    )
+    description = models.CharField(
+        _("Описание"),
+        max_length=255,
+        help_text=_("Краткое описание условия получения баллов."),
+    )
+    order = models.PositiveIntegerField(
+        _("Порядок"),
+        default=0,
+        help_text=_("Используется для сортировки вариантов."),
+    )
+
+    class Meta:
+        verbose_name = _("Вариант оценки")
+        verbose_name_plural = _("Варианты оценок")
+        ordering = ["order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["question", "order"],
+                name="unique_score_option_order_per_question",
+            ),
+            models.UniqueConstraint(
+                fields=["question", "score"],
+                name="unique_score_per_question",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.score} — {self.description}"
+
+
+class ObjectInfoField(models.Model):
+    """Настраиваемое поле информационной карточки объекта."""
+
+    class FieldType(models.TextChoices):
+        TEXT = "text", _("Текст")
+        NUMBER = "number", _("Число")
+        DATE = "date", _("Дата")
+        BOOLEAN = "boolean", _("Да/Нет")
+        CHOICE = "choice", _("Выбор из списка")
+
+    code = models.SlugField(
+        _("Код"),
+        max_length=50,
+        unique=True,
+        help_text=_("Машинное имя поля для хранения значений."),
+    )
+    label = models.CharField(
+        _("Название"),
+        max_length=255,
+        help_text=_("Как поле отображается в форме."),
+    )
+    field_type = models.CharField(
+        _("Тип поля"),
+        max_length=20,
+        choices=FieldType.choices,
+        default=FieldType.TEXT,
+        help_text=_("Определяет формат значения."),
+    )
+    is_required = models.BooleanField(
+        _("Обязательное"),
+        default=False,
+        help_text=_("Нужно ли обязательно заполнять поле."),
+    )
+    order = models.PositiveIntegerField(
+        _("Порядок"),
+        default=0,
+        help_text=_("Используется для сортировки полей."),
+    )
+    choices = models.TextField(
+        _("Варианты"),
+        blank=True,
+        help_text=_(
+            "Список значений для выбора (по одному в строке). Используется для полей выбора."
+        ),
+    )
+
+    class Meta:
+        verbose_name = _("Поле информационной карточки")
+        verbose_name_plural = _("Поля информационной карточки")
+        ordering = ["order", "label"]
+        indexes = [models.Index(fields=["order"])]
+
+    def __str__(self) -> str:
+        return self.label
