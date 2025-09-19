@@ -3,15 +3,23 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import UserProfile
 
-from .models import Building, Elevator, ReviewStatus
+from .admin import ChecklistSectionAdmin
+from .models import (
+    Building,
+    ChecklistCategory,
+    ChecklistSection,
+    Elevator,
+    ReviewStatus,
+)
 
 
 class CatalogModerationTests(TestCase):
@@ -216,3 +224,80 @@ class CatalogViewsTests(TestCase):
         elevator = Elevator.objects.get(identifier="EL-101")
         self.assertEqual(elevator.created_by, self.auditor)
         self.assertEqual(elevator.review_status, ReviewStatus.PENDING)
+
+
+class ChecklistAdminActionsTests(TestCase):
+    """Covers helper actions in the checklist admin interface."""
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.UserModel = get_user_model()
+
+        self.admin_user = self.UserModel.objects.create_user(
+            username="admin", password="StrongPass123"
+        )
+        self.admin_user.is_staff = True
+        self.admin_user.is_superuser = True
+        self.admin_user.save(update_fields=["is_staff", "is_superuser"])
+        self.admin_user.profile.role = UserProfile.Roles.ADMIN
+        self.admin_user.profile.mark_password_changed()
+        self.admin_user.profile.save(update_fields=["role", "password_changed_at"])
+
+        self.category_a = ChecklistCategory.objects.create(
+            code="cat-a", name="Категория A", order=1
+        )
+        self.category_b = ChecklistCategory.objects.create(
+            code="cat-b", name="Категория B", order=2
+        )
+        self.section_first = ChecklistSection.objects.create(
+            category=self.category_a,
+            title="Секция 1",
+            order=1,
+        )
+        self.section_second = ChecklistSection.objects.create(
+            category=self.category_a,
+            title="Секция 2",
+            order=2,
+        )
+        self.section_existing_target = ChecklistSection.objects.create(
+            category=self.category_b,
+            title="Секция в B",
+            order=1,
+        )
+
+    def test_move_sections_action_appends_to_target_category(self) -> None:
+        """Selected sections are appended to the destination keeping their order."""
+
+        request = self.factory.post(
+            "/admin/catalog/checklistsection/",
+            data={"target_category": str(self.category_b.pk)},
+        )
+        request.user = self.admin_user
+
+        admin_instance = ChecklistSectionAdmin(ChecklistSection, admin.site)
+        admin_instance.message_user = lambda *args, **kwargs: None  # type: ignore[assignment]
+
+        queryset = ChecklistSection.objects.filter(
+            pk__in=[self.section_first.pk, self.section_second.pk]
+        )
+        admin_instance.move_to_category(request, queryset)
+
+        self.section_first.refresh_from_db()
+        self.section_second.refresh_from_db()
+        self.section_existing_target.refresh_from_db()
+
+        self.assertEqual(self.section_first.category, self.category_b)
+        self.assertEqual(self.section_second.category, self.category_b)
+        self.assertEqual(self.section_first.order, 2)
+        self.assertEqual(self.section_second.order, 3)
+        ordered_titles = list(
+            self.category_b.sections.order_by("order").values_list("title", flat=True)
+        )
+        self.assertEqual(
+            ordered_titles,
+            [
+                self.section_existing_target.title,
+                self.section_first.title,
+                self.section_second.title,
+            ],
+        )
