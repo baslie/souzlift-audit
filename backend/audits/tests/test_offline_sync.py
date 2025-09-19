@@ -8,7 +8,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
-from audits.models import Audit, AuditAttachment, AuditResponse, OfflineSyncBatch
+from audits.models import (
+    Audit,
+    AuditAttachment,
+    AuditResponse,
+    OfflineSyncBatch,
+    MAX_ATTACHMENT_SIZE_BYTES,
+)
 from catalog.models import (
     Building,
     ChecklistCategory,
@@ -159,6 +165,70 @@ class OfflineSyncDataTests(TestCase):
         self.assertEqual(second_batch.response_status, first_batch.response_status)
 
 
+    def test_sync_conflict_when_response_id_not_owned(self) -> None:
+        url = reverse("offline-sync")
+
+        building = Building.objects.create(address="Комсомольский, 5", created_by=self.auditor)
+        elevator = Elevator.objects.create(
+            building=building,
+            identifier="EL-CONFLICT",
+            created_by=self.auditor,
+        )
+        target_audit = Audit.objects.create(elevator=elevator, created_by=self.auditor)
+        other_audit = Audit.objects.create(elevator=elevator, created_by=self.auditor)
+        foreign_response = AuditResponse.objects.create(
+            audit=other_audit,
+            question=self.question,
+            score=2,
+        )
+
+        payload = {
+            "device_id": "device-1",
+            "audits": [
+                {
+                    "client_id": "a-conflict",
+                    "id": target_audit.pk,
+                    "responses": [
+                        {
+                            "client_id": "r-conflict",
+                            "id": foreign_response.pk,
+                            "question_id": self.question.pk,
+                            "score": 1,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        response = self.client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertEqual(body.get("status"), "error")
+        self.assertEqual(body.get("code"), "validation_error")
+        self.assertIn("audits", body.get("errors", {}))
+        self.assertIn("Ответ", body["errors"]["audits"][0])
+
+        batches = OfflineSyncBatch.objects.filter(payload__kind="data")
+        self.assertEqual(batches.count(), 1)
+        batch = batches.first()
+        assert batch is not None
+        self.assertEqual(batch.status, OfflineSyncBatch.Status.ERROR)
+        self.assertEqual(batch.response_status, 400)
+        self.assertIn("audits", batch.error_details)
+        self.assertIn("Ответ", batch.error_details["audits"][0])
+
+        self.assertEqual(target_audit.responses.count(), 0)
+        self.assertEqual(
+            AuditResponse.objects.filter(audit=target_audit).count(),
+            0,
+        )
+
+
 class OfflineSyncAttachmentTests(ProtectedMediaTestCase):
     """Ensure attachments uploaded via offline sync are stored correctly."""
 
@@ -261,3 +331,43 @@ class OfflineSyncAttachmentTests(ProtectedMediaTestCase):
             OfflineSyncBatch.objects.filter(payload__kind="attachment").count(),
             1,
         )
+
+    def test_upload_attachment_rejects_large_file(self) -> None:
+        url = reverse("offline-sync")
+        payload = {
+            "device_id": "device-2",
+            "attachment": {
+                "response_id": self.response_id,
+                "caption": "Крупный файл",
+            },
+        }
+
+        oversized = MAX_ATTACHMENT_SIZE_BYTES + 1
+        big_file = SimpleUploadedFile(
+            "oversized.jpg",
+            b"0" * oversized,
+            content_type="image/jpeg",
+        )
+
+        response = self.client.post(
+            url,
+            data={"payload": json.dumps(payload), "file": big_file},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertEqual(body.get("status"), "error")
+        self.assertEqual(body.get("code"), "validation_error")
+        self.assertIn("file", body.get("errors", {}))
+        self.assertIn("8 МБ", body["errors"]["file"][0])
+
+        batches = OfflineSyncBatch.objects.filter(payload__kind="attachment")
+        self.assertEqual(batches.count(), 1)
+        batch = batches.first()
+        assert batch is not None
+        self.assertEqual(batch.status, OfflineSyncBatch.Status.ERROR)
+        self.assertEqual(batch.response_status, 400)
+        self.assertIn("file", batch.error_details)
+        self.assertIn("8 МБ", batch.error_details["file"][0])
+
+        self.assertEqual(AuditAttachment.objects.count(), 0)
