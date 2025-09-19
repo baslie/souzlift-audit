@@ -30,6 +30,14 @@
 
 Дополнительные инструкции по развёртыванию и обслуживанию будут добавляться в каталоге `docs/` по мере реализации этапов T9–T12.
 
+### Tailwind CSS и фронтенд-статика
+
+- Предсобранный файл Tailwind лежит в `backend/static/css/tailwind.min.css`. Источник для сборки — `backend/static/css/tailwind.src.css` и конфигурация `tailwind.config.js` в корне репозитория.
+- При изменении шаблонов или добавлении новых классов запустите компиляцию:
+  - при наличии Node.js — `NODE_ENV=production npx tailwindcss -i backend/static/css/tailwind.src.css -o backend/static/css/tailwind.min.css --minify`;
+  - без Node.js — скачайте [standalone-бинарь Tailwind](https://github.com/tailwindlabs/tailwindcss/releases) и выполните аналогичную команду, указав путь к бинарю.
+- Локальные копии `Alpine.js` и `HTMX` находятся в `backend/static/js/` и подключаются в шаблоне `base.html` только при передаче флагов `load_alpine` и `load_htmx` в контекст.
+
 ## Стандарты разработки
 
 ### Ветвление
