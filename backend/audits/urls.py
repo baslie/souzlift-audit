@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from django.urls import path
 
-from .views import AttachmentDownloadView, AuditListView, OfflineObjectInfoView
+from .views import (
+    AttachmentDownloadView,
+    AuditListView,
+    OfflineChecklistView,
+    OfflineObjectInfoView,
+)
 
 app_name = "audits"
 
@@ -13,6 +18,11 @@ urlpatterns = [
         "offline/object-info/",
         OfflineObjectInfoView.as_view(),
         name="offline-object-info",
+    ),
+    path(
+        "offline/checklist/",
+        OfflineChecklistView.as_view(),
+        name="offline-checklist",
     ),
     path("attachments/<str:token>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),
 ]
