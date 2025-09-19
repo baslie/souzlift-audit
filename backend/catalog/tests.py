@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -16,9 +17,11 @@ from .admin import ChecklistSectionAdmin
 from .models import (
     Building,
     ChecklistCategory,
+    ChecklistQuestion,
     ChecklistSection,
     Elevator,
     ReviewStatus,
+    ScoreOption,
 )
 
 
@@ -224,6 +227,105 @@ class CatalogViewsTests(TestCase):
         elevator = Elevator.objects.get(identifier="EL-101")
         self.assertEqual(elevator.created_by, self.auditor)
         self.assertEqual(elevator.review_status, ReviewStatus.PENDING)
+
+
+class ChecklistValidationTests(TestCase):
+    """Covers checklist validation rules and helpers."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.category = ChecklistCategory.objects.create(code="safety", name="Безопасность", order=1)
+        cls.section = ChecklistSection.objects.create(
+            category=cls.category,
+            title="Общие требования",
+            order=1,
+        )
+
+    def create_score_question(self, **overrides: object) -> ChecklistQuestion:
+        defaults: dict[str, object] = {
+            "section": self.section,
+            "text": "Проверка состояния оборудования",
+            "type": ChecklistQuestion.QuestionType.SCORE,
+            "max_score": 5,
+            "order": 1,
+        }
+        defaults.update(overrides)
+        return ChecklistQuestion.objects.create(**defaults)
+
+    def test_score_option_disallowed_for_non_score_question(self) -> None:
+        question = ChecklistQuestion.objects.create(
+            section=self.section,
+            text="Нужен ли доступ к шахте?",
+            type=ChecklistQuestion.QuestionType.BOOLEAN,
+            max_score=0,
+            order=2,
+        )
+        option = ScoreOption(question=question, score=1, description="Да", order=1)
+        with self.assertRaises(ValidationError) as exc:
+            option.full_clean()
+        self.assertIn("question", exc.exception.error_dict)
+
+    def test_score_option_cannot_exceed_max_score(self) -> None:
+        question = self.create_score_question(max_score=4)
+        option = ScoreOption(question=question, score=5, description="Отлично", order=1)
+        with self.assertRaises(ValidationError) as exc:
+            option.full_clean()
+        self.assertIn("score", exc.exception.error_dict)
+
+    def test_score_option_requires_positive_max_score(self) -> None:
+        question = self.create_score_question(max_score=0)
+        option = ScoreOption(question=question, score=1, description="Допуск", order=1)
+        with self.assertRaises(ValidationError) as exc:
+            option.full_clean()
+        self.assertIn("score", exc.exception.error_dict)
+
+    def test_score_option_validates_successfully(self) -> None:
+        question = self.create_score_question(max_score=5)
+        option = ScoreOption(question=question, score=5, description="Норматив выполнен", order=1)
+        option.full_clean()  # Should not raise.
+
+    def test_validate_answer_requires_known_score(self) -> None:
+        question = self.create_score_question(max_score=3)
+        ScoreOption.objects.create(question=question, score=3, description="Без замечаний", order=1)
+        with self.assertRaises(ValidationError) as exc:
+            question.validate_answer(score=2, comment="Требуется уточнение")
+        self.assertIn("score", exc.exception.error_dict)
+
+    def test_validate_answer_requires_comment_when_score_lower(self) -> None:
+        question = self.create_score_question(max_score=5)
+        ScoreOption.objects.create(question=question, score=5, description="Без замечаний", order=1)
+        ScoreOption.objects.create(question=question, score=3, description="Есть замечания", order=2)
+        with self.assertRaises(ValidationError) as exc:
+            question.validate_answer(score=3, comment=" ")
+        self.assertIn("comment", exc.exception.error_dict)
+        question.validate_answer(score=3, comment="Обнаружены мелкие недочёты")
+
+    def test_validate_answer_allows_max_score_without_comment(self) -> None:
+        question = self.create_score_question(max_score=4)
+        ScoreOption.objects.create(question=question, score=4, description="Отлично", order=1)
+        question.validate_answer(score=4, comment="")
+
+    def test_validate_answer_respects_requires_comment_flag(self) -> None:
+        question = self.create_score_question(max_score=4, requires_comment=True)
+        ScoreOption.objects.create(question=question, score=4, description="Отлично", order=1)
+        with self.assertRaises(ValidationError) as exc:
+            question.validate_answer(score=4, comment="")
+        self.assertIn("comment", exc.exception.error_dict)
+        question.validate_answer(score=4, comment="Комментарий добавлен")
+
+    def test_validate_answer_for_non_score_question(self) -> None:
+        question = ChecklistQuestion.objects.create(
+            section=self.section,
+            text="Опишите состояние машинного помещения",
+            type=ChecklistQuestion.QuestionType.TEXT,
+            max_score=0,
+            order=3,
+            requires_comment=True,
+        )
+        with self.assertRaises(ValidationError) as exc:
+            question.validate_answer(score=None, comment=" ")
+        self.assertIn("comment", exc.exception.error_dict)
+        question.validate_answer(score=None, comment="Описание состояния")
 
 
 class ChecklistAdminActionsTests(TestCase):

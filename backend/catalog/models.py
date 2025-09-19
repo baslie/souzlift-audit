@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -400,6 +401,73 @@ class ChecklistQuestion(models.Model):
     def __str__(self) -> str:
         return self.text
 
+    def _get_cached_score_values(self) -> list[int]:
+        """Return available score values for the question using cached relations."""
+
+        cache_key = "score_options"
+        if not hasattr(self, "_score_value_cache"):
+            options = None
+            if hasattr(self, "_prefetched_objects_cache"):
+                options = self._prefetched_objects_cache.get(cache_key)
+
+            if options is None:
+                options = list(self.score_options.all())
+
+            self._score_value_cache = [option.score for option in options]
+
+        return list(self._score_value_cache)
+
+    def is_score_valid(self, score: int | None) -> bool:
+        """Check that provided score matches available options for the question."""
+
+        if self.type != self.QuestionType.SCORE:
+            return score is None
+        if score is None:
+            return False
+        return score in self._get_cached_score_values()
+
+    def requires_comment_for_score(self, score: int | None) -> bool:
+        """Determine whether a comment is mandatory for a given score value."""
+
+        if self.requires_comment:
+            return True
+        if self.type != self.QuestionType.SCORE:
+            return False
+        if score is None:
+            return False
+        if self.max_score <= 0:
+            return False
+        return score < self.max_score
+
+    def validate_answer(self, *, score: int | None, comment: str | None) -> None:
+        """Validate score/comment pair according to business rules."""
+
+        errors: dict[str, list[str]] = {}
+
+        if self.type == self.QuestionType.SCORE:
+            if score is None:
+                errors.setdefault("score", []).append(_("Необходимо выбрать балл."))
+            elif not self.is_score_valid(score):
+                errors.setdefault("score", []).append(
+                    _("Выбранный балл недоступен для этого вопроса."),
+                )
+            if self.requires_comment_for_score(score):
+                comment_text = (comment or "").strip()
+                if not comment_text:
+                    errors.setdefault("comment", []).append(
+                        _("Комментарий обязателен при снижении балла."),
+                    )
+        else:
+            if self.requires_comment:
+                comment_text = (comment or "").strip()
+                if not comment_text:
+                    errors.setdefault("comment", []).append(
+                        _("Комментарий обязателен для этого вопроса."),
+                    )
+
+        if errors:
+            raise ValidationError(errors)
+
 
 class ScoreOption(models.Model):
     """Доступный вариант ответа для балльного вопроса."""
@@ -443,6 +511,40 @@ class ScoreOption(models.Model):
 
     def __str__(self) -> str:
         return f"{self.score} — {self.description}"
+
+    def clean(self) -> None:
+        """Ensure that option is consistent with the related question."""
+
+        super().clean()
+        if self.question_id is None and self.question is None:  # pragma: no cover - defensive
+            return
+
+        question = self.question
+        if question.type != ChecklistQuestion.QuestionType.SCORE:
+            raise ValidationError(
+                {
+                    "question": _("Варианты баллов допустимы только для балльных вопросов."),
+                }
+            )
+
+        if self.score > question.max_score:
+            raise ValidationError(
+                {
+                    "score": _(
+                        "Значение баллов не может превышать максимальный балл вопроса (%(max)d)."
+                    )
+                    % {"max": question.max_score},
+                }
+            )
+
+        if question.max_score <= 0 and self.score > 0:
+            raise ValidationError(
+                {
+                    "score": _(
+                        "Для добавления положительного балла увеличьте максимальный балл вопроса."
+                    )
+                }
+            )
 
 
 class ObjectInfoField(models.Model):
