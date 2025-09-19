@@ -52,6 +52,7 @@
     init() {
       this.initQuestions();
       this.dispatchReadyEvent();
+
       if (this.saveButton) {
         this.saveButton.addEventListener("click", (event) => {
           event.preventDefault();
