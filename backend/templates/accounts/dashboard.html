@@ -37,5 +37,23 @@
         </dd>
       </div>
     </dl>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <a
+        href="{% url 'catalog:building-list' %}"
+        class="flex flex-col gap-2 rounded-lg border border-sky-200 bg-sky-50 p-4 text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-sky-100"
+      >
+        <span class="text-xs font-semibold uppercase tracking-wide text-sky-700">Справочники</span>
+        <span class="text-lg font-semibold">Здания</span>
+        <span class="text-xs text-slate-600">Добавляйте новые адреса и следите за статусом модерации.</span>
+      </a>
+      <a
+        href="{% url 'catalog:elevator-list' %}"
+        class="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-100"
+      >
+        <span class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Справочники</span>
+        <span class="text-lg font-semibold">Лифты</span>
+        <span class="text-xs text-slate-600">Ведите учёт лифтов, их статуса и описания.</span>
+      </a>
+    </div>
   </div>
 {% endblock %}
