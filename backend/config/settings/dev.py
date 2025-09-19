@@ -20,3 +20,7 @@ LOGGING["handlers"]["console"]["formatter"] = "simple"
 LOGGING["handlers"]["console"]["level"] = "DEBUG" if DEBUG else LOG_LEVEL
 LOGGING["loggers"]["django"]["handlers"] = ["console"]
 LOGGING["root"]["level"] = "DEBUG" if DEBUG else LOG_LEVEL
+
+# В режиме разработки и тестирования используем обычное хранение статики,
+# чтобы избежать ошибок manifest при отсутствии сборки Tailwind.
+STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"

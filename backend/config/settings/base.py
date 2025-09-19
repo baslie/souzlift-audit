@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Iterable, List
 
+from django.urls import reverse_lazy
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
@@ -61,6 +63,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "accounts.middleware.ForcePasswordChangeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -126,6 +129,10 @@ EMAIL_USE_SSL = env_bool("DJANGO_EMAIL_USE_SSL", False)
 EMAIL_TIMEOUT = env_int("DJANGO_EMAIL_TIMEOUT", 10)
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "noreply@souzlift.local")
 SERVER_EMAIL = os.environ.get("DJANGO_SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+LOGIN_URL = reverse_lazy("accounts:login")
+LOGIN_REDIRECT_URL = reverse_lazy("accounts:dashboard")
+LOGOUT_REDIRECT_URL = reverse_lazy("accounts:login")
 
 LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO")
 LOGGING = {

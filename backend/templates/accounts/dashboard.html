@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Личный кабинет · Союзлифт Аудит{% endblock %}
+{% block header_links %}
+  <a href="{% url 'accounts:password-change' %}" class="text-slate-200 hover:text-white">Сменить пароль</a>
+  <a href="{% url 'accounts:logout' %}" class="text-slate-200 hover:text-white">Выйти</a>
+{% endblock %}
+{% block heading %}Личный кабинет{% endblock %}
+{% block subheading %}
+  {% if profile %}
+    <p class="text-sm text-slate-500">Добро пожаловать, {{ profile.full_name|default:request.user.username }}.</p>
+  {% else %}
+    <p class="text-sm text-slate-500">Добро пожаловать в систему Союзлифт Аудит.</p>
+  {% endif %}
+{% endblock %}
+{% block content %}
+  <div class="space-y-6 text-sm text-slate-700">
+    <p>В дальнейших итерациях здесь появятся списки аудитов и уведомления.</p>
+    <dl class="grid gap-4 sm:grid-cols-2">
+      <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <dt class="text-xs uppercase tracking-wide text-slate-500">Роль</dt>
+        <dd class="text-base font-semibold text-slate-900">
+          {% if profile %}
+            {% if profile.is_admin %}Администратор{% elif profile.is_auditor %}Аудитор{% else %}Пользователь{% endif %}
+          {% else %}
+            Пользователь
+          {% endif %}
+        </dd>
+      </div>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <dt class="text-xs uppercase tracking-wide text-slate-500">Последняя смена пароля</dt>
+        <dd class="text-base font-semibold text-slate-900">
+          {% if profile and profile.password_changed_at %}
+            {{ profile.password_changed_at|date:"d.m.Y H:i" }}
+          {% else %}
+            Не задано
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+  </div>
+{% endblock %}
