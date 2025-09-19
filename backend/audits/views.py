@@ -19,9 +19,9 @@ from django.views.generic import ListView, TemplateView
 from accounts.models import UserProfile
 from accounts.permissions import RoleQuerysetMixin, RoleRequiredMixin, is_admin
 
-from .models import Audit, AuditAttachment
+from .models import AttachmentLimits, Audit, AuditAttachment
 from .tokens import read_attachment_token
-from .services import build_catalog_snapshot_for_user
+from .services import build_catalog_snapshot_for_user, build_checklist_structure
 
 
 class AuditListView(RoleQuerysetMixin, ListView):
@@ -299,4 +299,39 @@ class OfflineObjectInfoView(RoleRequiredMixin, TemplateView):
         return context
 
 
-__all__ = ["AuditListView", "AttachmentDownloadView", "OfflineObjectInfoView"]
+class OfflineChecklistView(RoleRequiredMixin, TemplateView):
+    """Offline-friendly checklist form for auditors."""
+
+    template_name = "audits/offline_checklist.html"
+    allowed_roles = (UserProfile.Roles.AUDITOR, UserProfile.Roles.ADMIN)
+
+    def dispatch(self, request, *args, **kwargs):  # type: ignore[override]
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        client_id = self.request.GET.get("client_id", "").strip()
+        checklist = build_checklist_structure()
+        limits = AttachmentLimits()
+        max_size_mb = limits.max_size_bytes / (1024 * 1024)
+
+        context.update(
+            {
+                "client_id": client_id,
+                "checklist": checklist,
+                "attachment_limits": limits,
+                "max_attachment_size_mb": max_size_mb,
+                "return_url": reverse("audits:audit-list"),
+            }
+        )
+        return context
+
+
+__all__ = [
+    "AuditListView",
+    "AttachmentDownloadView",
+    "OfflineChecklistView",
+    "OfflineObjectInfoView",
+]

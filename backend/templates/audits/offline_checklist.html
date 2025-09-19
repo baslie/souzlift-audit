@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Чек-лист аудита · Союзлифт Аудит{% endblock %}
+{% block header_links %}
+  <a href="{% url 'audits:audit-list' %}" class="text-slate-200 hover:text-white">Мои аудиты</a>
+  <a href="{% url 'catalog:building-list' %}" class="text-slate-200 hover:text-white">Здания</a>
+  <a href="{% url 'catalog:elevator-list' %}" class="text-slate-200 hover:text-white">Лифты</a>
+  <a href="{% url 'accounts:dashboard' %}" class="text-slate-200 hover:text-white">Личный кабинет</a>
+  <a href="{% url 'accounts:logout' %}" class="text-slate-200 hover:text-white">Выйти</a>
+{% endblock %}
+{% block heading %}Заполнение чек-листа{% endblock %}
+{% block subheading %}
+  <p class="text-sm text-slate-500">
+    Выберите оценки по вопросам и добавьте комментарии и фотографии. Интерфейс поддерживает работу без сети после первой синхронизации.
+  </p>
+{% endblock %}
+{% block content %}
+  <div
+    data-checklist-form
+    data-client-id="{{ client_id }}"
+    data-max-per-response="{{ attachment_limits.max_per_response }}"
+    data-max-per-audit="{{ attachment_limits.max_per_audit }}"
+    data-max-size="{{ attachment_limits.max_size_bytes }}"
+    class="space-y-6"
+  >
+    <div class="space-y-3">
+      <div
+        data-status
+        class="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
+      ></div>
+      <div
+        data-error
+        class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+      ></div>
+    </div>
+
+    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="font-medium text-slate-700">Фотографии</p>
+        <p>
+          Всего добавлено: <span data-total-attachments class="font-semibold text-slate-800">0</span>
+          из {{ attachment_limits.max_per_audit }}.
+        </p>
+      </div>
+      <p class="mt-1 text-xs text-slate-500">
+        Не более {{ attachment_limits.max_per_response }} фото на вопрос, размер каждого файла до {{ max_attachment_size_mb|floatformat:1 }} МБ.
+      </p>
+    </div>
+
+    {% if checklist.categories %}
+      {% for category in checklist.categories %}
+        <section class="space-y-4 rounded-xl border border-slate-200 bg-white px-4 py-5 shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <h2 class="text-lg font-semibold text-slate-900">{{ category.name }}</h2>
+            <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ category.sections|length }} секций</span>
+          </div>
+          <div class="space-y-5">
+            {% for section in category.sections %}
+              <article class="space-y-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+                <header class="space-y-1">
+                  <h3 class="text-base font-semibold text-slate-900">{{ section.title }}</h3>
+                  {% if section.description %}
+                    <p class="text-sm text-slate-500">{{ section.description }}</p>
+                  {% endif %}
+                </header>
+                <div class="space-y-5">
+                  {% for question in section.questions %}
+                    <div
+                      data-question
+                      data-question-id="{{ question.id }}"
+                      data-question-type="{{ question.type }}"
+                      data-max-score="{{ question.max_score }}"
+                      data-requires-comment="{{ question.requires_comment|yesno:'true,false,false' }}"
+                      data-comment-on-reduced="{{ question.requires_comment_on_reduced_score|yesno:'true,false,false' }}"
+                      class="space-y-4 rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm"
+                    >
+                      <div class="space-y-2">
+                        <div class="flex items-start justify-between gap-3">
+                          <p class="text-sm font-semibold text-slate-800">{{ question.text }}</p>
+                          {% if question.type == 'score' and question.max_score %}
+                            <span class="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                              {{ question.max_score }} баллов
+                            </span>
+                          {% endif %}
+                        </div>
+                        {% if question.guideline %}
+                          <p class="text-xs text-slate-500">{{ question.guideline }}</p>
+                        {% endif %}
+                      </div>
+
+                      {% if question.type == 'score' %}
+                        <div class="flex flex-wrap gap-2" data-score-group>
+                          {% for option in question.score_options %}
+                            <button
+                              type="button"
+                              data-score-option
+                              data-score-value="{{ option.score }}"
+                              class="inline-flex w-full flex-col items-start gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:border-sky-400 hover:text-slate-900 sm:w-auto"
+                            >
+                              <span class="text-base font-semibold text-slate-800">{{ option.score }}</span>
+                              <span class="text-xs font-normal text-slate-500">{{ option.description }}</span>
+                            </button>
+                          {% endfor %}
+                        </div>
+                      {% elif question.type == 'boolean' %}
+                        <div class="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            data-score-option
+                            data-score-value="{{ question.max_score }}"
+                            class="inline-flex flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-slate-900 sm:flex-none sm:min-w-[120px]"
+                          >
+                            Да
+                          </button>
+                          <button
+                            type="button"
+                            data-score-option
+                            data-score-value="0"
+                            class="inline-flex flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-slate-900 sm:flex-none sm:min-w-[120px]"
+                          >
+                            Нет
+                          </button>
+                        </div>
+                      {% endif %}
+
+                      <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                          <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="comment-{{ question.id }}">
+                            {% if question.type == 'text' %}Ответ{% else %}Комментарий{% endif %}
+                          </label>
+                          <span
+                            data-comment-indicator
+                            class="hidden text-xs font-semibold text-amber-600"
+                          >Комментарий обязателен</span>
+                        </div>
+                        <textarea
+                          id="comment-{{ question.id }}"
+                          data-comment-field
+                          rows="3"
+                          class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                          placeholder="Добавьте пояснение или примечание"
+                        ></textarea>
+                      </div>
+
+                      <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Фотографии</p>
+                          <span data-attachment-info class="text-xs text-slate-500">0 / {{ attachment_limits.max_per_response }}</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            data-attachment-input
+                            class="hidden"
+                          />
+                          <button
+                            type="button"
+                            data-attachment-trigger
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+                          >
+                            Добавить фото
+                          </button>
+                          <p class="text-xs text-slate-400">
+                            Поддерживаются изображения до {{ max_attachment_size_mb|floatformat:1 }} МБ.
+                          </p>
+                        </div>
+                        <div data-attachment-list class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+                      </div>
+                    </div>
+                  {% empty %}
+                    <p class="text-sm text-slate-500">В секции пока нет вопросов.</p>
+                  {% endfor %}
+                </div>
+              </article>
+            {% empty %}
+              <p class="text-sm text-slate-500">Категория пока не содержит секций.</p>
+            {% endfor %}
+          </div>
+        </section>
+      {% endfor %}
+    {% else %}
+      <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Администратор ещё не настроил чек-лист. Вернитесь позже.
+      </div>
+    {% endif %}
+
+    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+      <a
+        href="{{ return_url }}"
+        class="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+      >
+        Вернуться к списку
+      </a>
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          data-action="save-draft"
+          class="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+        >
+          Сохранить черновик
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {{ checklist|json_script:"checklist-structure" }}
+{% endblock %}
+{% block extra_js %}
+  <script src="{% static 'js/offline-storage.js' %}" defer></script>
+  <script src="{% static 'js/checklist-form.js' %}" defer></script>
+{% endblock %}
