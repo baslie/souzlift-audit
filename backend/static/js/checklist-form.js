@@ -15,6 +15,8 @@
     "shadow-sm",
   ];
   const HIGHLIGHT_COMMENT_CLASSES = ["border-amber-400", "focus:border-amber-500", "focus:ring-amber-200"];
+  const COMMENT_MISSING_CLASSES = ["ring-2", "ring-amber-500", "ring-offset-1"];
+  const DISABLED_TRIGGER_CLASSES = ["opacity-50", "cursor-not-allowed"];
   const DEFAULT_COMMENT_BORDER = "border-slate-300";
   const MAX_CANVAS_EDGE = 1600;
 
@@ -34,17 +36,23 @@
 
       this.totalAttachments = 0;
       this.questions = new Map();
+      this.questionOrder = [];
+      this.pendingChangeFrame = null;
 
       this.statusBox = root.querySelector("[data-status]");
       this.errorBox = root.querySelector("[data-error]");
       this.totalCounter = root.querySelector("[data-total-attachments]");
       this.saveButton = root.querySelector('[data-action="save-draft"]');
 
+      this.root.checklistForm = this;
+
       this.init();
     }
 
     init() {
       this.initQuestions();
+      this.dispatchReadyEvent();
+
       if (this.saveButton) {
         this.saveButton.addEventListener("click", (event) => {
           event.preventDefault();
@@ -76,9 +84,17 @@
           attachmentList: element.querySelector("[data-attachment-list]"),
           scoreButtons: Array.from(element.querySelectorAll("[data-score-option]")),
           attachments: [],
+          commentIndicatorDefaultText: null,
+          commentRequired: false,
+          commentMissing: false,
         };
 
+        if (question.commentIndicator) {
+          question.commentIndicatorDefaultText = question.commentIndicator.textContent || "Комментарий обязателен";
+        }
+
         this.questions.set(id, question);
+        this.questionOrder.push(id);
         this.bindQuestion(question);
         this.updateCommentRequirement(question);
         this.updateAttachmentInfo(question);
@@ -105,6 +121,14 @@
       if (question.commentField) {
         question.commentField.addEventListener("input", () => {
           this.clearError();
+          const requiresComment = question.commentField.hasAttribute("required");
+          const value = question.commentField.value.trim();
+          if (requiresComment && !value) {
+            this.setCommentMissingState(question, true);
+          } else {
+            this.setCommentMissingState(question, false);
+          }
+          this.notifyChange(question);
         });
       }
 
@@ -126,7 +150,15 @@
         this.setOptionActive(optionButton, optionButton === button);
       });
       this.updateCommentRequirement(question);
+      const requiresComment = question.commentField && question.commentField.hasAttribute("required");
+      if (requiresComment && question.commentField) {
+        const valueText = question.commentField.value.trim();
+        if (!valueText) {
+          this.setCommentMissingState(question, true);
+        }
+      }
       this.clearError();
+      this.notifyChange(question);
     }
 
     setOptionActive(button, isActive) {
@@ -169,14 +201,9 @@
           }
         }
       }
-
-      if (question.commentIndicator) {
-        if (requiresComment) {
-          question.commentIndicator.classList.remove("hidden");
-        } else {
-          question.commentIndicator.classList.add("hidden");
-        }
-      }
+      question.commentRequired = requiresComment;
+      const shouldKeepMissing = question.commentMissing && requiresComment;
+      this.setCommentMissingState(question, shouldKeepMissing);
     }
 
     async handleAttachmentSelection(question, fileList) {
@@ -184,6 +211,7 @@
         return;
       }
       const files = Array.from(fileList);
+      let addedAny = false;
 
       for (const file of files) {
         if (question.attachments.length >= this.maxPerResponse) {
@@ -207,6 +235,7 @@
           this.updateAttachmentInfo(question);
           this.updateTotalCounter();
           this.clearError();
+          addedAny = true;
         } catch (error) {
           if (error && typeof error.message === "string" && error.message === "size_limit") {
             this.showError(
@@ -217,6 +246,10 @@
             this.showError(`Не удалось обработать файл «${file.name}». Попробуйте другое изображение.`);
           }
         }
+      }
+
+      if (addedAny) {
+        this.notifyChange(question);
       }
     }
 
@@ -382,6 +415,7 @@
       if (item && item.parentNode) {
         item.parentNode.removeChild(item);
       }
+      this.notifyChange(question);
     }
 
     updateAttachmentInfo(question) {
@@ -394,11 +428,31 @@
       if (this.totalCounter) {
         this.totalCounter.textContent = String(this.totalAttachments);
       }
+      this.refreshAttachmentTriggers();
     }
 
     handleSaveDraft() {
+      const missingComments = this.validateRequiredComments();
+      if (missingComments > 0) {
+        const message =
+          missingComments === 1
+            ? "Заполните обязательный комментарий перед сохранением."
+            : `Заполните обязательные комментарии (${missingComments}) перед сохранением.`;
+        this.showError(message);
+        return;
+      }
+
+      const state = this.collectState();
+      this.dispatchFormChange(state);
+      this.root.dispatchEvent(
+        new CustomEvent("checklist:save-draft", {
+          detail: state,
+          bubbles: true,
+        })
+      );
+
       this.showStatus(
-        "Заполните чек-лист и фотографии. Сохранение черновиков и синхронизация будут подключены на следующем шаге."
+        "Данные формы подготовлены для сохранения. Синхронизация будет добавлена на следующем этапе."
       );
     }
 
@@ -449,6 +503,169 @@
       if (this.errorBox) {
         this.errorBox.classList.add("hidden");
       }
+    }
+
+    setCommentMissingState(question, isMissing) {
+      const shouldMark = Boolean(isMissing);
+      question.commentMissing = shouldMark;
+      if (question.commentField) {
+        if (shouldMark) {
+          COMMENT_MISSING_CLASSES.forEach((cls) => question.commentField.classList.add(cls));
+        } else {
+          COMMENT_MISSING_CLASSES.forEach((cls) => question.commentField.classList.remove(cls));
+        }
+      }
+      this.syncCommentIndicator(question);
+    }
+
+    syncCommentIndicator(question) {
+      if (!question.commentIndicator) {
+        return;
+      }
+
+      if (question.commentMissing) {
+        question.commentIndicator.textContent = "Заполните обязательный комментарий";
+        question.commentIndicator.classList.remove("hidden");
+        return;
+      }
+
+      if (question.commentRequired) {
+        const text = question.commentIndicatorDefaultText || "Комментарий обязателен";
+        question.commentIndicator.textContent = text;
+        question.commentIndicator.classList.remove("hidden");
+      } else {
+        const text = question.commentIndicatorDefaultText || "Комментарий обязателен";
+        question.commentIndicator.textContent = text;
+        question.commentIndicator.classList.add("hidden");
+      }
+    }
+
+    refreshAttachmentTriggers() {
+      const globalLimitReached = this.totalAttachments >= this.maxPerAudit;
+      this.questions.forEach((question) => {
+        const trigger = question.attachmentTrigger;
+        if (!trigger) {
+          return;
+        }
+        const perQuestionLimitReached = question.attachments.length >= this.maxPerResponse;
+        const shouldDisable = perQuestionLimitReached || globalLimitReached;
+        trigger.disabled = shouldDisable;
+        trigger.setAttribute("aria-disabled", shouldDisable ? "true" : "false");
+        DISABLED_TRIGGER_CLASSES.forEach((cls) => {
+          if (shouldDisable) {
+            trigger.classList.add(cls);
+          } else {
+            trigger.classList.remove(cls);
+          }
+        });
+        if (perQuestionLimitReached) {
+          trigger.title = `Лимит ${this.maxPerResponse} фото для вопроса достигнут.`;
+        } else if (globalLimitReached) {
+          trigger.title = `Достигнут общий лимит ${this.maxPerAudit} фото для аудита.`;
+        } else {
+          trigger.removeAttribute("title");
+        }
+      });
+    }
+
+    validateRequiredComments() {
+      let missingCount = 0;
+      this.questions.forEach((question) => {
+        if (!question.commentField || !question.commentRequired) {
+          this.setCommentMissingState(question, false);
+          return;
+        }
+        const value = question.commentField.value.trim();
+        if (!value) {
+          missingCount += 1;
+          this.setCommentMissingState(question, true);
+        } else {
+          this.setCommentMissingState(question, false);
+        }
+      });
+      return missingCount;
+    }
+
+    getQuestionState(question) {
+      if (!question) {
+        return null;
+      }
+      const commentValue = question.commentField ? question.commentField.value : "";
+      return {
+        id: question.id,
+        type: question.type,
+        maxScore: question.maxScore,
+        score: question.selectedScore,
+        comment: commentValue,
+        requiresComment: question.commentRequired,
+        attachments: question.attachments.map((attachment) => ({
+          id: attachment.id,
+          name: attachment.originalName,
+          size: attachment.size,
+          file: attachment.file,
+          previewUrl: attachment.previewUrl,
+        })),
+      };
+    }
+
+    collectState() {
+      return {
+        clientId: this.clientId,
+        totalAttachments: this.totalAttachments,
+        questions: this.questionOrder
+          .map((questionId) => this.questions.get(questionId))
+          .filter((question) => Boolean(question))
+          .map((question) => this.getQuestionState(question))
+          .filter((questionState) => Boolean(questionState)),
+      };
+    }
+
+    notifyChange(question) {
+      const questionState = this.getQuestionState(question);
+      if (questionState) {
+        this.root.dispatchEvent(
+          new CustomEvent("checklist:question-change", {
+            detail: questionState,
+            bubbles: true,
+          })
+        );
+      }
+      this.scheduleFormChangeDispatch();
+    }
+
+    scheduleFormChangeDispatch() {
+      if (this.pendingChangeFrame !== null) {
+        return;
+      }
+      const requestFrame =
+        typeof window.requestAnimationFrame === "function"
+          ? window.requestAnimationFrame.bind(window)
+          : (callback) => window.setTimeout(callback, 16);
+      this.pendingChangeFrame = requestFrame(() => {
+        this.pendingChangeFrame = null;
+        this.dispatchFormChange();
+      });
+    }
+
+    dispatchFormChange(forcedState) {
+      const state = forcedState || this.collectState();
+      this.root.dispatchEvent(
+        new CustomEvent("checklist:change", {
+          detail: state,
+          bubbles: true,
+        })
+      );
+    }
+
+    dispatchReadyEvent() {
+      const state = this.collectState();
+      this.root.dispatchEvent(
+        new CustomEvent("checklist:ready", {
+          detail: state,
+          bubbles: true,
+        })
+      );
+      this.dispatchFormChange(state);
     }
   }
 })(window);
