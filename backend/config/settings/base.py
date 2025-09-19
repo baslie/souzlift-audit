@@ -170,3 +170,30 @@ LOGGING = {
         "level": LOG_LEVEL,
     },
 }
+
+_EXPORTED_HELPERS = {"env_bool", "env_int", "env_list"}
+
+
+EXPORTED_SETTINGS = tuple(
+    sorted(
+        name
+        for name, _value in globals().items()
+        if name.isupper() or name in _EXPORTED_HELPERS
+    )
+)
+
+
+def iter_exported_settings() -> Iterable[tuple[str, object]]:
+    """Yield the settings names and values that should propagate to env modules."""
+
+    for name in EXPORTED_SETTINGS:
+        yield name, globals()[name]
+
+
+__all__ = tuple(
+    sorted(
+        set(EXPORTED_SETTINGS)
+        | _EXPORTED_HELPERS
+        | {"EXPORTED_SETTINGS", "iter_exported_settings"}
+    )
+)

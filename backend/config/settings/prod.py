@@ -2,9 +2,24 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from pathlib import Path
 
-from .base import *  # noqa: F401,F403
+from . import base as base_settings
+
+
+_base_settings = dict(base_settings.iter_exported_settings())
+globals().update(_base_settings)
+
+ALLOWED_HOSTS = list(_base_settings["ALLOWED_HOSTS"])
+CSRF_TRUSTED_ORIGINS = list(_base_settings["CSRF_TRUSTED_ORIGINS"])
+LOGGING = deepcopy(_base_settings["LOGGING"])
+LOG_LEVEL = _base_settings["LOG_LEVEL"]
+env_bool = _base_settings["env_bool"]
+env_int = _base_settings["env_int"]
+BASE_DIR = _base_settings["BASE_DIR"]
+
+del _base_settings
 
 DEBUG = False
 
