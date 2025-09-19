@@ -1,6 +1,7 @@
 """REST endpoints for the audits application."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
@@ -68,30 +69,62 @@ class OfflineSyncView(LoginRequiredMixin, View):
         if not device_id:
             return self._json_error("invalid_payload", "Не указан идентификатор устройства (device_id).")
 
+        compact_payload = self._compact_batch_payload(payload, kind="data")
+        payload_hash = self._calculate_payload_hash(payload)
+
+        existing_batch = self._find_applied_batch(request.user, device_id, payload_hash)
+        if existing_batch and existing_batch.response_payload:
+            duplicate = OfflineSyncBatch.objects.create(
+                user=request.user,
+                device_id=device_id,
+                payload=compact_payload,
+                payload_hash=payload_hash,
+            )
+            duplicate.mark_applied(
+                existing_batch.response_payload,
+                status=existing_batch.response_status or 200,
+            )
+            return JsonResponse(
+                existing_batch.response_payload,
+                status=existing_batch.response_status or 200,
+            )
+
         batch = OfflineSyncBatch.objects.create(
             user=request.user,
             device_id=device_id,
-            payload=self._compact_batch_payload(payload, kind="data"),
+            payload=compact_payload,
+            payload_hash=payload_hash,
         )
 
         try:
             with transaction.atomic():
                 mapping = self._apply_data_payload(request, payload)
         except ValidationError as exc:
-            batch.mark_error(self._serialize_validation_error(exc))
-            return self._json_error("validation_error", "Не удалось применить данные синхронизации.", errors=batch.error_details, status=400)
+            details = self._serialize_validation_error(exc)
+            batch.mark_error(details, status=400)
+            return self._json_error(
+                "validation_error",
+                "Не удалось применить данные синхронизации.",
+                errors=details,
+                status=400,
+            )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.exception("Offline sync failed")
-            batch.mark_error({"type": exc.__class__.__name__, "message": str(exc)})
-            return self._json_error("processing_error", "Во время синхронизации произошла непредвиденная ошибка.", status=500)
+            details = {"type": exc.__class__.__name__, "message": str(exc)}
+            batch.mark_error(details, status=500)
+            return self._json_error(
+                "processing_error",
+                "Во время синхронизации произошла непредвиденная ошибка.",
+                status=500,
+            )
 
-        batch.mark_applied()
         response_payload = {
             "status": "ok",
             "device_id": device_id,
             "catalog": mapping["catalog"],
             "audits": mapping["audits"],
         }
+        batch.mark_applied(response_payload, status=200)
         return JsonResponse(response_payload, status=200)
 
     def _handle_attachment_payload(self, request: HttpRequest, payload: Any) -> JsonResponse:
@@ -156,14 +189,39 @@ class OfflineSyncView(LoginRequiredMixin, View):
                     status=200,
                 )
 
+        batch_payload = {
+            "kind": "attachment",
+            "response_id": response_pk,
+            "offline_uuid": offline_uuid,
+            "caption": caption or "",
+        }
+        payload_hash = self._calculate_payload_hash({
+            "device_id": device_id,
+            "payload": batch_payload,
+        })
+
+        existing_batch = self._find_applied_batch(request.user, device_id, payload_hash)
+        if existing_batch and existing_batch.response_payload:
+            duplicate = OfflineSyncBatch.objects.create(
+                user=request.user,
+                device_id=device_id,
+                payload=batch_payload,
+                payload_hash=payload_hash,
+            )
+            duplicate.mark_applied(
+                existing_batch.response_payload,
+                status=existing_batch.response_status or 201,
+            )
+            return JsonResponse(
+                existing_batch.response_payload,
+                status=existing_batch.response_status or 201,
+            )
+
         batch = OfflineSyncBatch.objects.create(
             user=request.user,
             device_id=device_id,
-            payload={
-                "kind": "attachment",
-                "response_id": response_pk,
-                "offline_uuid": offline_uuid,
-            },
+            payload=batch_payload,
+            payload_hash=payload_hash,
         )
 
         try:
@@ -184,19 +242,17 @@ class OfflineSyncView(LoginRequiredMixin, View):
             batch.mark_error({"type": exc.__class__.__name__, "message": str(exc)})
             return self._json_error("processing_error", "Во время загрузки вложения произошла ошибка.", status=500)
 
-        batch.mark_applied()
-        return JsonResponse(
-            {
-                "status": "ok",
-                "device_id": device_id,
-                "attachment": {
-                    "id": attachment.pk,
-                    "response_id": response_pk,
-                    "offline_uuid": attachment.offline_uuid,
-                },
+        response_payload = {
+            "status": "ok",
+            "device_id": device_id,
+            "attachment": {
+                "id": attachment.pk,
+                "response_id": response_pk,
+                "offline_uuid": str(attachment.offline_uuid) if attachment.offline_uuid else None,
             },
-            status=201,
-        )
+        }
+        batch.mark_applied(response_payload, status=201)
+        return JsonResponse(response_payload, status=201)
 
     # --- data processing helpers -----------------------------------------
 
@@ -518,6 +574,56 @@ class OfflineSyncView(LoginRequiredMixin, View):
                     if isinstance(entry, Mapping)
                 ]
         return result
+
+    @staticmethod
+    def _calculate_payload_hash(payload: Any) -> str:
+        """Return deterministic hash for the original payload."""
+
+        try:
+            normalized = json.dumps(
+                payload,
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        except TypeError:
+            normalized = json.dumps(
+                OfflineSyncView._stringify_payload(payload),
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _stringify_payload(payload: Any) -> Any:
+        """Convert non-serialisable objects to primitives for hashing."""
+
+        if isinstance(payload, Mapping):
+            return {str(key): OfflineSyncView._stringify_payload(value) for key, value in payload.items()}
+        if isinstance(payload, Iterable) and not isinstance(payload, (str, bytes)):
+            return [OfflineSyncView._stringify_payload(item) for item in payload]
+        if isinstance(payload, (bytes, bytearray)):
+            return payload.decode("utf-8", errors="ignore")
+        return payload
+
+    @staticmethod
+    def _find_applied_batch(user: Any, device_id: str, payload_hash: str) -> OfflineSyncBatch | None:
+        if not payload_hash:
+            return None
+
+        queryset = OfflineSyncBatch.objects.filter(
+            device_id=device_id,
+            payload_hash=payload_hash,
+            status=OfflineSyncBatch.Status.APPLIED,
+        ).order_by("-created_at")
+
+        if getattr(user, "is_authenticated", False):
+            queryset = queryset.filter(user=user)
+        else:
+            queryset = queryset.filter(user__isnull=True)
+
+        return queryset.first()
 
     @staticmethod
     def _json_error(
