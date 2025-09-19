@@ -32,3 +32,13 @@ class AuditSignatureAdmin(admin.ModelAdmin):
     list_display = ("audit", "signed_by", "signed_at")
     search_fields = ("audit__elevator__identifier", "signed_by")
     readonly_fields = ("signed_at",)
+
+
+@admin.register(models.AuditLogEntry)
+class AuditLogEntryAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "action", "entity_type", "entity_id", "user")
+    list_filter = ("action", "entity_type")
+    search_fields = ("entity_type", "entity_id", "payload")
+    readonly_fields = ("created_at", "payload")
+    date_hierarchy = "created_at"
+    autocomplete_fields = ("user",)
