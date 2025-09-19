@@ -20,6 +20,8 @@ from accounts.permissions import is_admin, is_auditor
 from audits.models import Audit, AuditAttachment, AuditResponse, OfflineSyncBatch
 from catalog.models import Building, Elevator, ReviewStatus, ChecklistQuestion
 
+from .services import build_catalog_snapshot_for_user
+
 logger = logging.getLogger(__name__)
 
 
@@ -639,4 +641,26 @@ class OfflineSyncView(LoginRequiredMixin, View):
         return JsonResponse(payload, status=status)
 
 
-__all__ = ["OfflineSyncView"]
+class CatalogSnapshotView(LoginRequiredMixin, View):
+    """Return a catalogue snapshot for offline-capable clients."""
+
+    http_method_names = ["get"]
+
+    def dispatch(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:
+        user = request.user
+        if not (is_auditor(user) or is_admin(user)):
+            return JsonResponse(
+                {
+                    "status": "forbidden",
+                    "detail": "Недостаточно прав для получения справочника.",
+                },
+                status=403,
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request: HttpRequest, *args: object, **kwargs: object) -> JsonResponse:
+        snapshot = build_catalog_snapshot_for_user(request.user)
+        return JsonResponse(snapshot, status=200)
+
+
+__all__ = ["OfflineSyncView", "CatalogSnapshotView"]

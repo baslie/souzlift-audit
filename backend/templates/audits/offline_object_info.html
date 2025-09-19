@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Информационная карта · Союзлифт Аудит{% endblock %}
+{% block header_links %}
+  <a href="{% url 'audits:audit-list' %}" class="text-slate-200 hover:text-white">Мои аудиты</a>
+  <a href="{% url 'catalog:building-list' %}" class="text-slate-200 hover:text-white">Здания</a>
+  <a href="{% url 'catalog:elevator-list' %}" class="text-slate-200 hover:text-white">Лифты</a>
+  <a href="{% url 'accounts:dashboard' %}" class="text-slate-200 hover:text-white">Личный кабинет</a>
+  <a href="{% url 'accounts:logout' %}" class="text-slate-200 hover:text-white">Выйти</a>
+{% endblock %}
+{% block heading %}Информационная карта объекта{% endblock %}
+{% block subheading %}
+  <p class="text-sm text-slate-500">
+    Укажите сведения об объекте перед заполнением чек-листа. Справочники зданий и лифтов подгружаются автоматически и доступны
+    без сети после первой синхронизации.
+  </p>
+{% endblock %}
+{% block content %}
+  <div
+    data-object-info-form
+    data-client-id="{{ client_id }}"
+    data-catalog-url="{{ catalog_snapshot_url }}"
+    data-list-url="{% url 'audits:audit-list' %}"
+    class="space-y-6"
+  >
+    <div class="space-y-3">
+      <div
+        data-status
+        class="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
+      ></div>
+      <div
+        data-error
+        class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+      ></div>
+    </div>
+
+    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+      <p>Справочники обновляются автоматически при наличии соединения.</p>
+      <p class="mt-1">
+        Последнее обновление: <span data-catalog-timestamp class="font-semibold text-slate-700">—</span>
+      </p>
+    </div>
+
+    <section class="space-y-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-900">Основные сведения</h2>
+        <button
+          type="button"
+          data-action="refresh-catalog"
+          class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+        >
+          Обновить справочники
+        </button>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" for="object-building">
+            Здание из справочника
+          </label>
+          <select
+            id="object-building"
+            data-building-select
+            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          >
+            <option value="">Выберите здание…</option>
+          </select>
+          <p class="mt-1 text-xs text-slate-500">Если нужного здания нет, укажите адрес вручную.</p>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" for="object-elevator">
+            Лифт из справочника
+          </label>
+          <select
+            id="object-elevator"
+            data-elevator-select
+            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-slate-100"
+          >
+            <option value="">Выберите лифт…</option>
+          </select>
+          <p class="mt-1 text-xs text-slate-500">Список фильтруется по выбранному зданию.</p>
+        </div>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" for="object-building-manual">
+            Адрес вручную
+          </label>
+          <input
+            type="text"
+            id="object-building-manual"
+            data-building-manual
+            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+            placeholder="Например, Советская 12"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" for="object-elevator-manual">
+            Лифт вручную
+          </label>
+          <input
+            type="text"
+            id="object-elevator-manual"
+            data-elevator-manual
+            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+            placeholder="Например, Лифт №3"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" for="object-note">
+          Примечание
+        </label>
+        <textarea
+          id="object-note"
+          rows="3"
+          data-note-field
+          class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          placeholder="Дополнительные сведения для себя"
+        ></textarea>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900">Информационная карта</h2>
+      <p data-empty-fields class="hidden text-sm text-slate-500">
+        Администратор ещё не настроил поля информационной карточки. Сохраните основные сведения и вернитесь позже.
+      </p>
+      <div data-dynamic-fields class="grid gap-4 md:grid-cols-2"></div>
+    </section>
+
+    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+      <a
+        href="{{ return_url }}"
+        class="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+      >
+        Вернуться к списку
+      </a>
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          data-action="save"
+          class="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+        >
+          Сохранить
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {{ object_info_fields|json_script:"object-info-fields" }}
+  {{ catalog_payload|json_script:"catalog-initial-data" }}
+  {{ catalog_metadata|json_script:"catalog-meta" }}
+{% endblock %}
+{% block extra_js %}
+  <script src="{% static 'js/offline-storage.js' %}" defer></script>
+  <script src="{% static 'js/object-info-form.js' %}" defer></script>
+{% endblock %}

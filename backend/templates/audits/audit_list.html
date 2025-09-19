@@ -25,7 +25,13 @@
   </button>
 {% endblock %}
 {% block content %}
-  <div data-auditor-portal class="space-y-10" data-dialog-id="offline-audit-dialog">
+  <div
+    data-auditor-portal
+    class="space-y-10"
+    data-dialog-id="offline-audit-dialog"
+    data-catalog-url="{{ catalog_snapshot_url }}"
+    data-object-info-url="{% url 'audits:offline-object-info' %}"
+  >
     <div data-portal-flash class="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"></div>
 
     <section class="space-y-4">
@@ -368,5 +374,6 @@
   </div>
 {% endblock %}
 {% block extra_js %}
+  <script src="{% static 'js/offline-storage.js' %}" defer></script>
   <script src="{% static 'js/auditor-portal.js' %}" defer></script>
 {% endblock %}
