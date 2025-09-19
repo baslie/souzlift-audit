@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if form.instance.pk %}Редактирование здания · Союзлифт Аудит{% else %}Новое здание · Союзлифт Аудит{% endif %}
+{% endblock %}
+{% block header_links %}
+  <a href="{% url 'accounts:dashboard' %}" class="text-slate-200 hover:text-white">Личный кабинет</a>
+  <a href="{% url 'catalog:building-list' %}" class="text-slate-200 hover:text-white">Здания</a>
+  <a href="{% url 'catalog:elevator-list' %}" class="text-slate-200 hover:text-white">Лифты</a>
+  <a href="{% url 'accounts:logout' %}" class="text-slate-200 hover:text-white">Выйти</a>
+{% endblock %}
+{% block heading %}
+  {% if form.instance.pk %}Редактирование здания{% else %}Новое здание{% endif %}
+{% endblock %}
+{% block subheading %}
+  <p class="text-sm text-slate-500">
+    Укажите адрес и дополнительные сведения. Запись будет доступна после утверждения администратором.
+  </p>
+{% endblock %}
+{% block content %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="space-y-5">
+      {% for field in form %}
+        <div>
+          <label for="{{ field.id_for_label }}" class="mb-1 block text-sm font-semibold text-slate-700">{{ field.label }}{% if field.field.required %}<span class="text-red-500">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}
+            <div class="mt-1 text-xs text-slate-500">{{ field.help_text|safe }}</div>
+          {% endif %}
+          {% if field.errors %}
+            <div class="mt-1 text-xs font-semibold text-red-600">{{ field.errors|striptags }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="mt-6 flex flex-wrap gap-3">
+      <button
+        type="submit"
+        class="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-700"
+      >
+        {% if form.instance.pk %}Сохранить изменения{% else %}Сохранить{% endif %}
+      </button>
+      <a
+        href="{% url 'catalog:building-list' %}"
+        class="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        Отмена
+      </a>
+    </div>
+  </form>
+{% endblock %}
+

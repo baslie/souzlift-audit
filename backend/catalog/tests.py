@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import UserProfile
@@ -137,4 +138,81 @@ class CatalogModerationTests(TestCase):
 
         elevator.send_to_review()
         elevator.refresh_from_db()
+        self.assertEqual(elevator.review_status, ReviewStatus.PENDING)
+
+
+class CatalogViewsTests(TestCase):
+    """Covers user interface interactions for catalog views."""
+
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+
+        self.admin = self.UserModel.objects.create_user(username="admin", password="StrongPass123")
+        self.admin.profile.role = UserProfile.Roles.ADMIN
+        self.admin.profile.save(update_fields=["role"])
+        self.admin.profile.mark_password_changed()
+
+        self.auditor = self.UserModel.objects.create_user(username="auditor", password="StrongPass123")
+        self.auditor.profile.mark_password_changed()
+        self.other_auditor = self.UserModel.objects.create_user(username="other", password="StrongPass123")
+        self.other_auditor.profile.mark_password_changed()
+
+    def test_auditor_can_create_building(self) -> None:
+        self.client.force_login(self.auditor)
+        response = self.client.post(
+            reverse("catalog:building-create"),
+            data={"address": "Советская, 5", "entrance": "2", "notes": "Тестовая запись"},
+        )
+        self.assertRedirects(response, reverse("catalog:building-list"))
+        building = Building.objects.get(address="Советская, 5")
+        self.assertEqual(building.created_by, self.auditor)
+        self.assertEqual(building.review_status, ReviewStatus.PENDING)
+
+    def test_admin_can_approve_building_from_list(self) -> None:
+        target = Building.objects.create(address="Ленина, 8", created_by=self.auditor)
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("catalog:building-moderate", args=[target.pk]),
+            data={"action": "approve", "next": reverse("catalog:building-list")},
+        )
+        self.assertRedirects(response, reverse("catalog:building-list"))
+        target.refresh_from_db()
+        self.assertEqual(target.review_status, ReviewStatus.APPROVED)
+        self.assertEqual(target.verified_by, self.admin)
+
+    def test_status_filter_returns_pending_records(self) -> None:
+        approved = Building.objects.create(address="Кирова, 3", created_by=self.admin)
+        approved.approve(self.admin)
+        pending = Building.objects.create(address="Томская, 4", created_by=self.auditor)
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("catalog:building-list"), data={"status": ReviewStatus.PENDING})
+        self.assertEqual(response.status_code, 200)
+        object_list = list(response.context["object_list"])
+        self.assertIn(pending, object_list)
+        self.assertNotIn(approved, object_list)
+
+    def test_auditor_cannot_edit_foreign_building(self) -> None:
+        foreign_building = Building.objects.create(address="Университетская, 12", created_by=self.other_auditor)
+        self.client.force_login(self.auditor)
+        response = self.client.get(reverse("catalog:building-update", args=[foreign_building.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_auditor_can_create_elevator_for_approved_building(self) -> None:
+        approved_building = Building.objects.create(address="Гагарина, 7", created_by=self.admin)
+        approved_building.approve(self.admin)
+
+        self.client.force_login(self.auditor)
+        response = self.client.post(
+            reverse("catalog:elevator-create"),
+            data={
+                "building": approved_building.pk,
+                "identifier": "EL-101",
+                "status": Elevator.Status.IN_SERVICE,
+                "description": "Пассажирский лифт",
+            },
+        )
+        self.assertRedirects(response, reverse("catalog:elevator-list"))
+        elevator = Elevator.objects.get(identifier="EL-101")
+        self.assertEqual(elevator.created_by, self.auditor)
         self.assertEqual(elevator.review_status, ReviewStatus.PENDING)
