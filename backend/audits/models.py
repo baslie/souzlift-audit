@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from collections.abc import Mapping
 from typing import Any, Final
 
 from django.conf import settings
@@ -943,6 +944,13 @@ class OfflineSyncBatch(models.Model):
         blank=True,
         help_text=_("Содержимое запроса на синхронизацию."),
     )
+    payload_hash = models.CharField(
+        _("Хэш данных"),
+        max_length=64,
+        blank=True,
+        default="",
+        help_text=_("Детерминированный отпечаток исходного запроса."),
+    )
     status = models.CharField(
         _("Статус"),
         max_length=20,
@@ -955,6 +963,17 @@ class OfflineSyncBatch(models.Model):
         default=dict,
         blank=True,
         help_text=_("Описание ошибок, если обработка завершилась неудачно."),
+    )
+    response_payload = models.JSONField(
+        _("Ответ"),
+        default=dict,
+        blank=True,
+        help_text=_("Снимок ответа, возвращённого клиенту."),
+    )
+    response_status = models.PositiveSmallIntegerField(
+        _("Код ответа"),
+        default=0,
+        help_text=_("HTTP-статус ответа на запрос синхронизации."),
     )
     created_at = models.DateTimeField(
         _("Создано"),
@@ -969,22 +988,49 @@ class OfflineSyncBatch(models.Model):
         indexes = [
             models.Index(fields=["status"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["payload_hash"]),
         ]
 
-    def mark_applied(self, *, commit: bool = True) -> None:
+    def mark_applied(
+        self,
+        response: Mapping[str, Any] | None = None,
+        *,
+        status: int = 200,
+        commit: bool = True,
+    ) -> None:
         """Отметить пакет как успешно применённый."""
 
         self.status = self.Status.APPLIED
+        self.response_status = status
+        update_fields = ["status", "response_status"]
+        if response is not None:
+            self.response_payload = dict(response)
+            update_fields.append("response_payload")
         if commit:
-            self.save(update_fields=["status"])
+            self.save(update_fields=update_fields)
 
-    def mark_error(self, details: dict[str, Any] | None = None, *, commit: bool = True) -> None:
+    def mark_error(
+        self,
+        details: Mapping[str, Any] | None = None,
+        *,
+        status: int = 400,
+        commit: bool = True,
+    ) -> None:
         """Зафиксировать ошибку обработки пакета."""
 
         self.status = self.Status.ERROR
-        self.error_details = details or {}
+        self.error_details = dict(details or {})
+        self.response_payload = {}
+        self.response_status = status
         if commit:
-            self.save(update_fields=["status", "error_details"])
+            self.save(
+                update_fields=[
+                    "status",
+                    "error_details",
+                    "response_payload",
+                    "response_status",
+                ]
+            )
 
     def __str__(self) -> str:
         status_label = self.get_status_display()

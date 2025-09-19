@@ -131,6 +131,32 @@ class OfflineSyncDataTests(TestCase):
         self.assertEqual(batch.status, OfflineSyncBatch.Status.APPLIED)
         self.assertEqual(batch.device_id, "device-1")
         self.assertEqual(batch.payload.get("kind"), "data")
+        self.assertTrue(batch.payload_hash)
+        self.assertEqual(batch.response_status, 200)
+        self.assertEqual(batch.response_payload["audits"][0]["id"], audit.pk)
+
+        # Повторная отправка идентичного payload возвращает сохранённый результат.
+        duplicate_response = self.client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(duplicate_response.status_code, 200)
+        duplicate_body = duplicate_response.json()
+        self.assertEqual(duplicate_body, body)
+
+        self.assertEqual(Building.objects.count(), 1)
+        self.assertEqual(Elevator.objects.count(), 1)
+        self.assertEqual(Audit.objects.count(), 1)
+        self.assertEqual(AuditResponse.objects.count(), 1)
+
+        batches = OfflineSyncBatch.objects.filter(device_id="device-1").order_by("created_at")
+        self.assertEqual(batches.count(), 2)
+        first_batch, second_batch = list(batches)
+        self.assertEqual(first_batch.payload_hash, second_batch.payload_hash)
+        self.assertEqual(second_batch.status, OfflineSyncBatch.Status.APPLIED)
+        self.assertEqual(second_batch.response_payload, first_batch.response_payload)
+        self.assertEqual(second_batch.response_status, first_batch.response_status)
 
 
 class OfflineSyncAttachmentTests(ProtectedMediaTestCase):
@@ -220,6 +246,8 @@ class OfflineSyncAttachmentTests(ProtectedMediaTestCase):
         assert batch is not None
         self.assertEqual(batch.status, OfflineSyncBatch.Status.APPLIED)
         self.assertEqual(batch.device_id, "device-2")
+        self.assertEqual(batch.response_status, 201)
+        self.assertTrue(batch.payload_hash)
 
         # Duplicate upload with the same offline UUID returns existing attachment without new batch.
         duplicate_response = self.client.post(
