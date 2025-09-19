@@ -116,6 +116,8 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+PROTECTED_MEDIA_ROOT = BASE_DIR / "protected_media"
+AUDIT_ATTACHMENT_URL_MAX_AGE = env_int("DJANGO_AUDIT_ATTACHMENT_URL_MAX_AGE", 300)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -197,6 +199,8 @@ __all__ = [
     "STATICFILES_STORAGE",
     "MEDIA_URL",
     "MEDIA_ROOT",
+    "PROTECTED_MEDIA_ROOT",
+    "AUDIT_ATTACHMENT_URL_MAX_AGE",
     "DEFAULT_AUTO_FIELD",
     "EMAIL_BACKEND",
     "EMAIL_HOST",

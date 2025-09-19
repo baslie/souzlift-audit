@@ -7,8 +7,12 @@ from typing import Final
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+
+from .storages import protected_media_storage
+from .tokens import build_attachment_token
 
 MAX_ATTACHMENT_SIZE_BYTES: Final[int] = 8 * 1024 * 1024
 MAX_ATTACHMENTS_PER_RESPONSE: Final[int] = 10
@@ -405,6 +409,7 @@ class AuditAttachment(models.Model):
     file = models.ImageField(
         _("Файл"),
         upload_to=attachment_upload_to,
+        storage=protected_media_storage,
         help_text=_("Вложение с подтверждающими материалами."),
     )
     caption = models.CharField(
@@ -438,6 +443,19 @@ class AuditAttachment(models.Model):
 
     def __str__(self) -> str:
         return f"Attachment #{self.pk} for response {self.response_id}"
+
+    def get_download_token(self) -> str:
+        """Сформировать подписанный токен для скачивания вложения."""
+
+        if not self.pk:
+            raise ValueError("Нельзя сформировать ссылку для несохранённого вложения.")
+        return build_attachment_token(self.pk)
+
+    def get_download_url(self) -> str:
+        """Получить защищённый URL для скачивания вложения."""
+
+        token = self.get_download_token()
+        return reverse("audits:attachment-download", kwargs={"token": token})
 
     def clean(self) -> None:
         super().clean()
@@ -513,6 +531,7 @@ class AuditSignature(models.Model):
     signature_image = models.ImageField(
         _("Подпись"),
         upload_to=signature_upload_to,
+        storage=protected_media_storage,
         help_text=_("Изображение подписи."),
     )
     signed_at = models.DateTimeField(
