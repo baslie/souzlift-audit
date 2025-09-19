@@ -10,16 +10,18 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.signing import BadSignature, SignatureExpired
 from django.db.models import Count, Q, QuerySet
 from django.http import FileResponse, Http404, HttpResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views import View
-from django.views.generic import ListView
+from django.views.generic import ListView, TemplateView
 
 from accounts.models import UserProfile
-from accounts.permissions import RoleQuerysetMixin, is_admin
+from accounts.permissions import RoleQuerysetMixin, RoleRequiredMixin, is_admin
 
 from .models import Audit, AuditAttachment
 from .tokens import read_attachment_token
+from .services import build_catalog_snapshot_for_user
 
 
 class AuditListView(RoleQuerysetMixin, ListView):
@@ -190,6 +192,7 @@ class AuditListView(RoleQuerysetMixin, ListView):
                 "period_param": self.period_param,
                 "querystring": self.get_preserved_querystring(),
                 "AuditStatus": Audit.Status,
+                "catalog_snapshot_url": reverse("catalog-snapshot"),
             }
         )
         badge_classes = self.get_status_badge_classes()
@@ -263,4 +266,37 @@ class AttachmentDownloadView(LoginRequiredMixin, View):
         return getattr(user, "pk", None) == author_id
 
 
-__all__ = ["AuditListView", "AttachmentDownloadView"]
+class OfflineObjectInfoView(RoleRequiredMixin, TemplateView):
+    """Offline-friendly form for filling audit object information."""
+
+    template_name = "audits/offline_object_info.html"
+    allowed_roles = (UserProfile.Roles.AUDITOR, UserProfile.Roles.ADMIN)
+
+    def dispatch(self, request, *args, **kwargs):  # type: ignore[override]
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        client_id = self.request.GET.get("client_id", "").strip()
+        snapshot = build_catalog_snapshot_for_user(self.request.user)
+        context.update(
+            {
+                "client_id": client_id,
+                "catalog_snapshot_url": reverse("catalog-snapshot"),
+                "object_info_fields": snapshot.get("object_fields", []),
+                "catalog_payload": {
+                    "buildings": snapshot.get("buildings", []),
+                    "elevators": snapshot.get("elevators", []),
+                },
+                "catalog_metadata": {
+                    "generated_at": snapshot.get("generated_at"),
+                },
+                "return_url": reverse("audits:audit-list"),
+            }
+        )
+        return context
+
+
+__all__ = ["AuditListView", "AttachmentDownloadView", "OfflineObjectInfoView"]

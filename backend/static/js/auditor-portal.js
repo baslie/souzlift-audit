@@ -1,9 +1,16 @@
 (function () {
   "use strict";
 
-  const DB_NAME = "souzlift_offline";
-  const DB_VERSION = 1;
-  const STORE_AUDITS = "offline_audits";
+  const Offline = window.SouzliftOffline || null;
+  const STORES = Offline
+    ? Offline.STORES
+    : {
+        AUDITS: "offline_audits",
+        BUILDINGS: "catalog_buildings",
+        ELEVATORS: "catalog_elevators",
+        OBJECT_FIELDS: "object_info_fields",
+        META: "catalog_meta",
+      };
 
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-auditor-portal]").forEach((element) => {
@@ -25,6 +32,8 @@
       this.errorBox = this.form ? this.form.querySelector("[data-offline-error]") : null;
       this.openButtons = Array.from(root.querySelectorAll('[data-portal-action="open-dialog"]'));
       this.closeButtons = Array.from(root.querySelectorAll('[data-portal-action="close-dialog"]'));
+      this.catalogUrl = root.dataset.catalogUrl || "";
+      this.objectInfoUrl = root.dataset.objectInfoUrl || "";
       this.db = null;
 
       if (this.dialog && typeof this.dialog.showModal !== "function") {
@@ -66,18 +75,24 @@
           this.db.close();
         }
       });
+      window.addEventListener("online", () => {
+        if (this.db) {
+          this.refreshCatalogCache();
+        }
+      });
     }
 
     initDatabase() {
-      if (!window.indexedDB) {
+      if (!Offline || !Offline.isSupported()) {
         this.showOfflineWarning("Браузер не поддерживает IndexedDB. Черновики будут недоступны.");
         this.disableOfflineCreation();
         return;
       }
-      openDatabase()
+      Offline.openDatabase()
         .then((db) => {
           this.db = db;
           this.refreshOfflineList();
+          this.refreshCatalogCache();
         })
         .catch((error) => {
           console.error("Failed to initialise offline database", error);
@@ -141,6 +156,10 @@
       if (!this.form || !this.db) {
         return;
       }
+      if (!Offline) {
+        this.showFormError("Локальное хранилище недоступно.");
+        return;
+      }
       const building = (this.form.elements.building?.value || "").trim();
       const elevator = (this.form.elements.elevator?.value || "").trim();
       const plannedDateRaw = (this.form.elements.planned_date?.value || "").trim();
@@ -153,18 +172,21 @@
 
       const now = new Date().toISOString();
       const record = {
-        clientId: generateClientId(),
+        clientId: Offline.generateClientId(),
         building,
         elevator,
+        buildingId: null,
+        elevatorId: null,
         plannedDate: plannedDateRaw || null,
         note,
         createdAt: now,
         updatedAt: now,
         status: "draft",
         syncState: "pending",
+        objectInfo: {},
       };
 
-      saveRecord(this.db, record)
+      Offline.putRecord(this.db, STORES.AUDITS, record)
         .then(() => {
           this.showFlash("Черновик сохранён. Он будет доступен без подключения к интернету.");
           this.closeDialog();
@@ -213,17 +235,73 @@
     }
 
     refreshOfflineList() {
-      if (!this.db || !this.offlineList) {
+      if (!this.db || !this.offlineList || !Offline) {
         return;
       }
-      fetchAllRecords(this.db)
+      Offline.getAllRecords(this.db, STORES.AUDITS)
         .then((records) => {
+          records.sort((a, b) => {
+            const left = a.updatedAt || a.createdAt || "";
+            const right = b.updatedAt || b.createdAt || "";
+            return right.localeCompare(left);
+          });
           this.renderOfflineList(records);
         })
         .catch((error) => {
           console.error("Failed to read offline audits", error);
           this.showFlash("Не удалось прочитать офлайн-черновики.", "error");
         });
+    }
+
+    async refreshCatalogCache() {
+      if (!this.db || !this.catalogUrl || !Offline) {
+        return;
+      }
+      try {
+        const response = await fetch(this.catalogUrl, {
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+        const payload = await response.json();
+        await this.persistCatalogPayload(payload);
+      } catch (error) {
+        console.warn("Failed to refresh catalogue snapshot", error);
+      }
+    }
+
+    async persistCatalogPayload(payload) {
+      if (!this.db || !Offline) {
+        return;
+      }
+      const buildings = Array.isArray(payload?.buildings) ? payload.buildings : [];
+      const elevators = Array.isArray(payload?.elevators) ? payload.elevators : [];
+      const fields = Array.isArray(payload?.object_fields) ? payload.object_fields : [];
+      try {
+        await Offline.clearStore(this.db, STORES.BUILDINGS);
+        await Offline.clearStore(this.db, STORES.ELEVATORS);
+        await Offline.clearStore(this.db, STORES.OBJECT_FIELDS);
+        if (buildings.length) {
+          await Offline.putRecords(this.db, STORES.BUILDINGS, buildings);
+        }
+        if (elevators.length) {
+          await Offline.putRecords(this.db, STORES.ELEVATORS, elevators);
+        }
+        if (fields.length) {
+          await Offline.putRecords(this.db, STORES.OBJECT_FIELDS, fields);
+        }
+        const generatedAt = payload?.generated_at || null;
+        if (generatedAt) {
+          await Offline.putRecord(this.db, STORES.META, {
+            key: "catalog_generated_at",
+            value: generatedAt,
+          });
+        }
+      } catch (error) {
+        console.warn("Failed to store catalogue snapshot", error);
+      }
     }
 
     renderOfflineList(records) {
@@ -278,7 +356,7 @@
       if (openButton) {
         openButton.addEventListener("click", (event) => {
           event.preventDefault();
-          this.showFlash("Заполнение черновика будет доступно после настройки форм чек-листа.", "info");
+          this.openDraft(record);
         });
       }
       if (deleteButton) {
@@ -290,6 +368,25 @@
       return root;
     }
 
+    openDraft(record) {
+      if (!record || !record.clientId) {
+        this.showFlash("Черновик не найден.", "error");
+        return;
+      }
+      if (!this.objectInfoUrl) {
+        this.showFlash("Форма информационной карты появится позже.", "info");
+        return;
+      }
+      try {
+        const target = new URL(this.objectInfoUrl, window.location.href);
+        target.searchParams.set("client_id", record.clientId);
+        window.location.href = target.toString();
+      } catch (error) {
+        const separator = this.objectInfoUrl.includes("?") ? "&" : "?";
+        window.location.href = `${this.objectInfoUrl}${separator}client_id=${encodeURIComponent(record.clientId)}`;
+      }
+    }
+
     handleDelete(clientId) {
       if (!this.db) {
         return;
@@ -298,7 +395,11 @@
       if (!confirmed) {
         return;
       }
-      deleteRecord(this.db, clientId)
+      if (!Offline) {
+        this.showFlash("Локальное хранилище недоступно.", "error");
+        return;
+      }
+      Offline.deleteRecord(this.db, STORES.AUDITS, clientId)
         .then(() => {
           this.showFlash("Черновик удалён.");
           this.refreshOfflineList();
@@ -308,72 +409,6 @@
           this.showFlash("Не удалось удалить черновик.", "error");
         });
     }
-  }
-
-  function openDatabase() {
-    return new Promise((resolve, reject) => {
-      try {
-        const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error || new Error("Не удалось открыть IndexedDB."));
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains(STORE_AUDITS)) {
-            const store = db.createObjectStore(STORE_AUDITS, { keyPath: "clientId" });
-            store.createIndex("updatedAt", "updatedAt", { unique: false });
-            store.createIndex("status", "status", { unique: false });
-          }
-        };
-        request.onsuccess = () => resolve(request.result);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  function saveRecord(db, record) {
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_AUDITS, "readwrite");
-      const store = transaction.objectStore(STORE_AUDITS);
-      store.put(record);
-      transaction.oncomplete = () => resolve(record);
-      transaction.onerror = () => reject(transaction.error || new Error("Ошибка записи в IndexedDB."));
-    });
-  }
-
-  function fetchAllRecords(db) {
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_AUDITS, "readonly");
-      const store = transaction.objectStore(STORE_AUDITS);
-      const request = store.getAll();
-      request.onsuccess = () => {
-        const records = Array.isArray(request.result) ? request.result.slice() : [];
-        records.sort((a, b) => {
-          const left = a.updatedAt || a.createdAt || "";
-          const right = b.updatedAt || b.createdAt || "";
-          return right.localeCompare(left);
-        });
-        resolve(records);
-      };
-      request.onerror = () => reject(request.error || new Error("Ошибка чтения из IndexedDB."));
-    });
-  }
-
-  function deleteRecord(db, clientId) {
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_AUDITS, "readwrite");
-      const store = transaction.objectStore(STORE_AUDITS);
-      store.delete(clientId);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error || new Error("Ошибка удаления из IndexedDB."));
-    });
-  }
-
-  function generateClientId() {
-    if (window.crypto && typeof window.crypto.randomUUID === "function") {
-      return window.crypto.randomUUID();
-    }
-    const random = Math.random().toString(16).slice(2);
-    return `draft-${Date.now().toString(16)}-${random}`;
   }
 
   function formatDate(value) {
