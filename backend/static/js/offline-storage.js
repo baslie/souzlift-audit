@@ -2,13 +2,16 @@
   "use strict";
 
   const DB_NAME = "souzlift_offline";
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const STORES = Object.freeze({
     AUDITS: "offline_audits",
     BUILDINGS: "catalog_buildings",
     ELEVATORS: "catalog_elevators",
     OBJECT_FIELDS: "object_info_fields",
     META: "catalog_meta",
+    RESPONSES: "offline_responses",
+    ATTACHMENTS: "offline_attachments",
+    CATALOG_ADDITIONS: "offline_catalog_additions",
   });
 
   function isSupported() {
@@ -65,6 +68,50 @@
 
         if (!db.objectStoreNames.contains(STORES.META)) {
           db.createObjectStore(STORES.META, { keyPath: "key" });
+        }
+
+        let responseStore;
+        if (db.objectStoreNames.contains(STORES.RESPONSES)) {
+          responseStore = upgradeTx ? upgradeTx.objectStore(STORES.RESPONSES) : null;
+        } else {
+          responseStore = db.createObjectStore(STORES.RESPONSES, { keyPath: "id" });
+        }
+        if (responseStore) {
+          if (!responseStore.indexNames.contains("by_client")) {
+            responseStore.createIndex("by_client", "clientId", { unique: false });
+          }
+          if (!responseStore.indexNames.contains("by_question")) {
+            responseStore.createIndex("by_question", "questionKey", { unique: false });
+          }
+        }
+
+        let attachmentStore;
+        if (db.objectStoreNames.contains(STORES.ATTACHMENTS)) {
+          attachmentStore = upgradeTx ? upgradeTx.objectStore(STORES.ATTACHMENTS) : null;
+        } else {
+          attachmentStore = db.createObjectStore(STORES.ATTACHMENTS, { keyPath: "id" });
+        }
+        if (attachmentStore) {
+          if (!attachmentStore.indexNames.contains("by_client")) {
+            attachmentStore.createIndex("by_client", "clientId", { unique: false });
+          }
+          if (!attachmentStore.indexNames.contains("by_question")) {
+            attachmentStore.createIndex("by_question", "questionKey", { unique: false });
+          }
+        }
+
+        if (!db.objectStoreNames.contains(STORES.CATALOG_ADDITIONS)) {
+          const catalogStore = db.createObjectStore(STORES.CATALOG_ADDITIONS, { keyPath: "id" });
+          catalogStore.createIndex("by_client", "clientId", { unique: false });
+          catalogStore.createIndex("by_type", "type", { unique: false });
+        } else if (upgradeTx) {
+          const catalogStore = upgradeTx.objectStore(STORES.CATALOG_ADDITIONS);
+          if (!catalogStore.indexNames.contains("by_client")) {
+            catalogStore.createIndex("by_client", "clientId", { unique: false });
+          }
+          if (!catalogStore.indexNames.contains("by_type")) {
+            catalogStore.createIndex("by_type", "type", { unique: false });
+          }
         }
       };
 
@@ -126,6 +173,35 @@
     });
   }
 
+  function getRecordsByIndex(db, storeName, indexName, value) {
+    return withStore(db, storeName, "readonly", (store) => {
+      const index = store.index(indexName);
+      return index.getAll(value);
+    }).then((result) => {
+      if (!Array.isArray(result)) {
+        return [];
+      }
+      return result.slice();
+    });
+  }
+
+  function deleteRecords(db, storeName, keys) {
+    if (!Array.isArray(keys) || keys.length === 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      try {
+        const transaction = db.transaction(storeName, "readwrite");
+        const store = transaction.objectStore(storeName);
+        keys.forEach((key) => store.delete(key));
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error || new Error("Ошибка удаления из IndexedDB."));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   function deleteRecord(db, storeName, key) {
     return withStore(db, storeName, "readwrite", (store) => store.delete(key)).then(() => undefined);
   }
@@ -152,7 +228,9 @@
     putRecords,
     getRecord,
     getAllRecords,
+    getRecordsByIndex,
     deleteRecord,
+    deleteRecords,
     clearStore,
     generateClientId,
   });
