@@ -7,11 +7,14 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from audits.api import OfflineSyncView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
     path("catalog/", include("catalog.urls")),
     path("audits/", include("audits.urls")),
+    path("api/offline-sync/", OfflineSyncView.as_view(), name="offline-sync"),
     path("", RedirectView.as_view(pattern_name="accounts:dashboard", permanent=False), name="home"),
 ]
 

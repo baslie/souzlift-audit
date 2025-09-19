@@ -914,3 +914,80 @@ class AuditLogEntry(models.Model):
     def __str__(self) -> str:
         return f"{self.created_at:%Y-%m-%d %H:%M:%S} — {self.action}"
 
+
+class OfflineSyncBatch(models.Model):
+    """Журнал запросов офлайн-синхронизации."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("В обработке")
+        APPLIED = "applied", _("Применён")
+        ERROR = "error", _("Ошибка")
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="offline_batches",
+        verbose_name=_("Пользователь"),
+        help_text=_("Кто инициировал синхронизацию."),
+    )
+    device_id = models.CharField(
+        _("Устройство"),
+        max_length=255,
+        help_text=_("Идентификатор устройства, выполнившего синхронизацию."),
+    )
+    payload = models.JSONField(
+        _("Данные"),
+        default=dict,
+        blank=True,
+        help_text=_("Содержимое запроса на синхронизацию."),
+    )
+    status = models.CharField(
+        _("Статус"),
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        help_text=_("Результат обработки пакета."),
+    )
+    error_details = models.JSONField(
+        _("Сведения об ошибке"),
+        default=dict,
+        blank=True,
+        help_text=_("Описание ошибок, если обработка завершилась неудачно."),
+    )
+    created_at = models.DateTimeField(
+        _("Создано"),
+        auto_now_add=True,
+        help_text=_("Когда пакет был принят сервером."),
+    )
+
+    class Meta:
+        verbose_name = _("Пакет офлайн-синхронизации")
+        verbose_name_plural = _("Пакеты офлайн-синхронизации")
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def mark_applied(self, *, commit: bool = True) -> None:
+        """Отметить пакет как успешно применённый."""
+
+        self.status = self.Status.APPLIED
+        if commit:
+            self.save(update_fields=["status"])
+
+    def mark_error(self, details: dict[str, Any] | None = None, *, commit: bool = True) -> None:
+        """Зафиксировать ошибку обработки пакета."""
+
+        self.status = self.Status.ERROR
+        self.error_details = details or {}
+        if commit:
+            self.save(update_fields=["status", "error_details"])
+
+    def __str__(self) -> str:
+        status_label = self.get_status_display()
+        identifier = self.pk if self.pk is not None else "pending"
+        return f"Batch #{identifier} ({status_label})"
+
