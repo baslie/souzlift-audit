@@ -21,6 +21,14 @@
 4. Сформировать релизную ветку `release/vX.Y.Z` от `main`, если требуется длительная стабилизация. В противном случае релиз оформляется напрямую из `main`.
 5. Согласовать окно обслуживания с заказчиком и уведомить пользователей не менее чем за 3 рабочих дня.
 
+#### 1.2.1. Конфигурация окружения
+
+- На боевых серверах явно устанавливайте `DJANGO_ENV=prod` перед запуском служб `gunicorn` и фоновых задач.
+- Укажите переменные `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS` (список доменов через запятую) и, при необходимости, `DJANGO_CSRF_TRUSTED_ORIGINS` с префиксом `https://`.
+- Настройте почтовый шлюз через `DJANGO_EMAIL_HOST`, `DJANGO_EMAIL_PORT`, `DJANGO_EMAIL_HOST_USER`, `DJANGO_EMAIL_HOST_PASSWORD`, `DJANGO_EMAIL_USE_TLS`/`DJANGO_EMAIL_USE_SSL`, `DJANGO_DEFAULT_FROM_EMAIL`.
+- Для логирования задайте `DJANGO_LOG_FILE` (например, `/var/log/souzlift/app.log`), а также параметры ротации `DJANGO_LOG_MAX_BYTES` и `DJANGO_LOG_BACKUP_COUNT` при необходимости.
+- Параметры HTTPS (HSTS, редиректы) можно скорректировать переменными `DJANGO_SECURE_SSL_REDIRECT`, `DJANGO_SECURE_HSTS_SECONDS`, `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS`, `DJANGO_SECURE_HSTS_PRELOAD`, `DJANGO_SECURE_REFERRER_POLICY` в зависимости от инфраструктуры заказчика.
+
 ### 1.3. Развёртывание на продакшене
 
 1. Зайти на сервер под учётной записью администратора приложения.
