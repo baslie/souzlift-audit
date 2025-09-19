@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Вход в систему · Союзлифт Аудит{% endblock %}
+{% block header_links %}
+  <a href="{% url 'accounts:login' %}" class="text-slate-200 hover:text-white">Вход</a>
+{% endblock %}
+{% block heading %}Вход в систему{% endblock %}
+{% block subheading %}
+  <p class="text-sm text-slate-500">Используйте учётные данные, выданные администратором.</p>
+{% endblock %}
+{% block content %}
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+        {{ form.non_field_errors|join:" " }}
+      </div>
+    {% endif %}
+    <div class="space-y-4">
+      {% for field in form %}
+        <div class="space-y-1">
+          <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}
+            <p class="text-sm text-red-600">{{ field.errors|join:" " }}</p>
+          {% endif %}
+          {% if field.help_text %}
+            {{ field.help_text|safe }}
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="flex items-center justify-end">
+      <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2">
+        Войти
+      </button>
+    </div>
+  </form>
+{% endblock %}
