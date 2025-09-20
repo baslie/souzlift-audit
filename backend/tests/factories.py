@@ -31,6 +31,20 @@ class UserFactory(factory.django.DjangoModelFactory):
     password = factory.PostGenerationMethodCall("set_password", DEFAULT_USER_PASSWORD)
 
     @factory.post_generation
+    def ensure_password_saved(
+        self, create: bool, extracted: object | None, **_: Any
+    ) -> None:
+        """Persist hashed password produced by :meth:`set_password`."""
+
+        if not create:
+            return
+        if extracted is False:
+            return
+        if not self.password:
+            return
+        self.save(update_fields=["password"])
+
+    @factory.post_generation
     def profile(self, create: bool, extracted: dict[str, Any] | None, **kwargs: Any) -> None:
         """Обновляет связанный профиль при необходимости."""
 

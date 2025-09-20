@@ -126,6 +126,14 @@ class OfflineSyncView(LoginRequiredMixin, View):
             "catalog": mapping["catalog"],
             "audits": mapping["audits"],
         }
+        full_snapshot = build_catalog_snapshot_for_user(
+            request.user,
+            include_checklist=True,
+            include_filters=True,
+        )
+        response_payload["catalog_snapshot"] = full_snapshot
+        response_payload["checklist"] = full_snapshot.get("checklist", {})
+        response_payload["audit_filters"] = full_snapshot.get("audit_filters", {})
         batch.mark_applied(response_payload, status=200)
         return JsonResponse(response_payload, status=200)
 
@@ -659,7 +667,11 @@ class CatalogSnapshotView(LoginRequiredMixin, View):
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request: HttpRequest, *args: object, **kwargs: object) -> JsonResponse:
-        snapshot = build_catalog_snapshot_for_user(request.user)
+        snapshot = build_catalog_snapshot_for_user(
+            request.user,
+            include_checklist=True,
+            include_filters=True,
+        )
         return JsonResponse(snapshot, status=200)
 
 

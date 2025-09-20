@@ -103,6 +103,28 @@ def test_offline_sync_round_trip(client, settings, tmp_path):
         assert body["catalog"]["buildings"][0]["client_id"] == "b-local"
         assert body["catalog"]["elevators"][0]["client_id"] == "e-local"
 
+        snapshot = body.get("catalog_snapshot")
+        assert snapshot is not None
+        assert "checklist" in snapshot
+        assert "audit_filters" in snapshot
+
+        checklist_payload = body.get("checklist")
+        assert checklist_payload is not None
+        if checklist_payload["categories"]:
+            first_category = checklist_payload["categories"][0]
+            if first_category["sections"]:
+                first_section = first_category["sections"][0]
+                if first_section["questions"]:
+                    question_meta = first_section["questions"][0]
+                    assert "category_id" in question_meta
+                    assert "section_id" in question_meta
+
+        filters_payload = body.get("audit_filters")
+        assert filters_payload is not None
+        assert "status" in filters_payload
+        assert "period" in filters_payload
+        assert "review" not in filters_payload
+
         audit_mapping = body["audits"][0]
         audit_id = audit_mapping["id"]
         response_mapping = audit_mapping["responses"][0]
