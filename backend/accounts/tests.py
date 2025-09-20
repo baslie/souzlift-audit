@@ -247,3 +247,49 @@ class UserAdminActionsTests(TestCase):
         self.assertIsNone(profile.password_changed_at)
         messages = list(get_messages(request))
         self.assertTrue(any("TempPass123!" in message.message for message in messages))
+
+
+class UserAdminInlineTests(TestCase):
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+        self.admin_user = self.UserModel.objects.create_superuser(
+            username="main-admin",
+            email="admin@example.com",
+            password="AdminPass123!",
+        )
+        self.admin_user.profile.mark_password_changed()
+
+    def test_create_user_with_profile_inline_does_not_duplicate(self) -> None:
+        self.client.force_login(self.admin_user)
+
+        response = self.client.post(
+            reverse("admin:auth_user_add"),
+            data={
+                "username": "denis-bulgin",
+                "password1": "TempPass123!",
+                "password2": "TempPass123!",
+                "profile-TOTAL_FORMS": "1",
+                "profile-INITIAL_FORMS": "0",
+                "profile-MIN_NUM_FORMS": "0",
+                "profile-MAX_NUM_FORMS": "1",
+                "profile-0-id": "",
+                "profile-0-full_name": "Булгин Денис",
+                "profile-0-role": UserProfile.Roles.ADMIN,
+                "profile-0-phone": "+7 999 111-22-33",
+                "profile-0-employee_id": "ADM-001",
+                "profile-0-password_changed_at": "",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        created_user = self.UserModel.objects.get(username="denis-bulgin")
+
+        profiles = UserProfile.objects.filter(user=created_user)
+        self.assertEqual(profiles.count(), 1)
+
+        profile = profiles.get()
+        self.assertEqual(profile.full_name, "Булгин Денис")
+        self.assertEqual(profile.role, UserProfile.Roles.ADMIN)
+        self.assertEqual(profile.phone, "+7 999 111-22-33")
+        self.assertEqual(profile.employee_id, "ADM-001")
