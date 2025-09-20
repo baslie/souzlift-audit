@@ -2,12 +2,6 @@
 {% block title %}
   {% if form.instance.pk %}Редактирование лифта · Союзлифт Аудит{% else %}Новый лифт · Союзлифт Аудит{% endif %}
 {% endblock %}
-{% block header_links %}
-  <a href="{% url 'accounts:dashboard' %}" class="app-header__link">Личный кабинет</a>
-  <a href="{% url 'catalog:building-list' %}" class="app-header__link">Здания</a>
-  <a href="{% url 'catalog:elevator-list' %}" class="app-header__link">Лифты</a>
-  <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
-{% endblock %}
 {% block heading %}
   {% if form.instance.pk %}Редактирование лифта{% else %}Новый лифт{% endif %}
 {% endblock %}

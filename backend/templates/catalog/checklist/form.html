@@ -1,12 +1,5 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title|default:"Изменение чек-листа · Союзлифт Аудит" }}{% endblock %}
-{% block header_links %}
-  <a href="{% url 'accounts:dashboard' %}" class="app-header__link">Личный кабинет</a>
-  <a href="{% url 'catalog:building-list' %}" class="app-header__link">Здания</a>
-  <a href="{% url 'catalog:elevator-list' %}" class="app-header__link">Лифты</a>
-  <a href="{% url 'catalog:checklist-overview' %}" class="app-header__link">Чек-лист</a>
-  <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
-{% endblock %}
 {% block heading %}{{ form_heading|default:"Настройка чек-листа" }}{% endblock %}
 {% block subheading %}
   {% if form_subheading %}

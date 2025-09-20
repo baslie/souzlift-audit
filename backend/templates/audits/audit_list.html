@@ -1,13 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}{% if is_admin %}Аудиты · Союзлифт Аудит{% else %}Мои аудиты · Союзлифт Аудит{% endif %}{% endblock %}
-{% block header_links %}
-  <a href="{% url 'audits:audit-list' %}" class="app-header__link aria-current:font-semibold aria-current:text-white" aria-current="page">{% if is_admin %}Аудиты{% else %}Мои аудиты{% endif %}</a>
-  <a href="{% url 'catalog:building-list' %}" class="app-header__link">Здания</a>
-  <a href="{% url 'catalog:elevator-list' %}" class="app-header__link">Лифты</a>
-  <a href="{% url 'accounts:dashboard' %}" class="app-header__link">Личный кабинет</a>
-  <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
-{% endblock %}
 {% block heading %}{% if is_admin %}Аудиты{% else %}Мои аудиты{% endif %}{% endblock %}
 {% block subheading %}
   {% if is_admin %}

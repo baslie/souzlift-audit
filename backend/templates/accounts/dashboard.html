@@ -1,23 +1,33 @@
 {% extends "base.html" %}
-{% block title %}Личный кабинет · Союзлифт Аудит{% endblock %}
-{% block header_links %}
-  <a href="{% url 'accounts:password-change' %}" class="app-header__link">Сменить пароль</a>
-  <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
+{% block title %}
+  {% if profile and profile.is_admin %}
+    Кабинет администратора · Союзлифт Аудит
+  {% elif profile and profile.is_auditor %}
+    Кабинет аудитора · Союзлифт Аудит
+  {% else %}
+    Личный кабинет · Союзлифт Аудит
+  {% endif %}
 {% endblock %}
-{% block heading %}Личный кабинет{% endblock %}
+{% block heading %}
+  {% if profile and profile.is_admin %}
+    Кабинет администратора
+  {% elif profile and profile.is_auditor %}
+    Кабинет аудитора
+  {% else %}
+    Личный кабинет
+  {% endif %}
+{% endblock %}
 {% block subheading %}
-  {% if profile %}
-    Добро пожаловать, {{ profile.full_name|default:request.user.username }}.
+  {% if profile and profile.is_admin %}
+    Управляйте справочниками, чек-листом и аудиторскими проверками без обращения к Django Admin.
+  {% elif profile and profile.is_auditor %}
+    Планируйте офлайн-проверки, следите за статусами аудитов и обновляйте объекты прямо из веб-интерфейса.
   {% else %}
     Добро пожаловать в систему Союзлифт Аудит.
   {% endif %}
 {% endblock %}
 {% block content %}
-  <div class="space-y-6 text-sm text-ink-700">
-    <p>
-      Используйте портал аудитора, чтобы создавать и синхронизировать проверки. Доступ к справочникам зданий и лифтов остаётся
-      в этом разделе.
-    </p>
+  <div class="space-y-8 text-sm text-ink-700">
     <dl class="grid gap-4 sm:grid-cols-2">
       <div class="app-card p-4">
         <dt class="text-xs uppercase tracking-wide text-ink-500">Роль</dt>
@@ -40,41 +50,101 @@
         </dd>
       </div>
     </dl>
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <a
-        href="{% url 'audits:audit-list' %}"
-        class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-100"
-      >
-        <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Рабочие процессы</span>
-        <span class="text-lg font-semibold">Мои аудиты</span>
-        <span class="text-xs text-ink-500">Просматривайте выполненные проверки, готовьте офлайн-черновики и следите за статусами.</span>
-      </a>
-      <a
-        href="{% url 'catalog:building-list' %}"
-        class="flex flex-col gap-2 rounded-2xl border border-success-200 bg-success-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-success-100"
-      >
-        <span class="text-xs font-semibold uppercase tracking-wide text-success-700">Справочники</span>
-        <span class="text-lg font-semibold">Здания</span>
-        <span class="text-xs text-ink-500">Добавляйте новые адреса и следите за статусом модерации.</span>
-      </a>
-      <a
-        href="{% url 'catalog:elevator-list' %}"
-        class="flex flex-col gap-2 rounded-2xl border border-warning-200 bg-warning-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-warning-100"
-      >
-        <span class="text-xs font-semibold uppercase tracking-wide text-warning-700">Справочники</span>
-        <span class="text-lg font-semibold">Лифты</span>
-        <span class="text-xs text-ink-500">Ведите учёт лифтов, их статуса и описания.</span>
-      </a>
-      {% if profile and profile.is_admin %}
-        <a
-          href="{% url 'catalog:checklist-overview' %}"
-          class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-surface-elevated p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-50"
-        >
-          <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Настройки</span>
-          <span class="text-lg font-semibold">Чек-лист</span>
-          <span class="text-xs text-ink-500">Управляйте структурами вопросов и вариантами оценок для аудитов.</span>
-        </a>
-      {% endif %}
-    </div>
+
+    {% if profile and profile.is_admin %}
+      <section class="space-y-5">
+        <p>
+          Этот раздел объединяет инструменты администратора: модерацию объектов, конструирование чек-листа и контроль отправленных
+          аудитов. Для управления пользователями и аварийных операций используйте Django Admin только при наличии прав
+          суперпользователя.
+        </p>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <a
+            href="{% url 'audits:audit-list' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-100"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Аудиты</span>
+            <span class="text-lg font-semibold">Все проверки</span>
+            <span class="text-xs text-ink-500">Просматривайте отправленные отчёты, отмечайте просмотренные записи и экспортируйте результаты.</span>
+          </a>
+          <a
+            href="{% url 'catalog:building-list' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-success-200 bg-success-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-success-100"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-success-700">Справочники</span>
+            <span class="text-lg font-semibold">Здания</span>
+            <span class="text-xs text-ink-500">Модерируйте новые адреса, фиксируйте подтверждение и отслеживайте историю изменений.</span>
+          </a>
+          <a
+            href="{% url 'catalog:elevator-list' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-warning-200 bg-warning-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-warning-100"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-warning-700">Справочники</span>
+            <span class="text-lg font-semibold">Лифты</span>
+            <span class="text-xs text-ink-500">Проверяйте карточки лифтов, статус модерации и актуальность описаний.</span>
+          </a>
+          <a
+            href="{% url 'catalog:checklist-overview' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-surface-elevated p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-50"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Конструктор</span>
+            <span class="text-lg font-semibold">Чек-лист</span>
+            <span class="text-xs text-ink-500">Управляйте категориями, секциями и вариантами баллов — изменения сразу становятся доступными аудиторам.</span>
+          </a>
+        </div>
+        <div class="rounded-2xl border border-border-subtle bg-surface-subtle p-4 text-xs text-ink-600">
+          <p>
+            Для операций с пользователями и аварийного исправления данных обращайтесь к техническому оператору. Ссылки на Django
+            Admin скрыты для прикладных ролей, чтобы исключить случайные правки в служебных разделах.
+          </p>
+        </div>
+      </section>
+    {% elif profile and profile.is_auditor %}
+      <section class="space-y-5">
+        <p>
+          Используйте рабочий кабинет для подготовки офлайн-черновиков и синхронизации результатов. Все справочники доступны в
+          режиме чтения, а новые объекты проходят модерацию администратора.
+        </p>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <a
+            href="{% url 'audits:audit-list' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-100"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Рабочие процессы</span>
+            <span class="text-lg font-semibold">Мои аудиты</span>
+            <span class="text-xs text-ink-500">Создавайте офлайн-черновики, отправляйте результаты и отслеживайте статус проверки.</span>
+          </a>
+          <a
+            href="{% url 'catalog:building-list' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-success-200 bg-success-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-success-100"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-success-700">Справочники</span>
+            <span class="text-lg font-semibold">Здания</span>
+            <span class="text-xs text-ink-500">Добавляйте новые адреса и следите за решением по модерации ваших записей.</span>
+          </a>
+          <a
+            href="{% url 'catalog:elevator-list' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-warning-200 bg-warning-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-warning-100"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-warning-700">Справочники</span>
+            <span class="text-lg font-semibold">Лифты</span>
+            <span class="text-xs text-ink-500">Просматривайте утверждённые карточки и дополняйте их при необходимости.</span>
+          </a>
+        </div>
+        <div class="rounded-2xl border border-border-subtle bg-surface-subtle p-4 text-xs text-ink-600">
+          <p>
+            Ссылка на Django Admin не отображается: все необходимые действия выполняются в пользовательском интерфейсе. Если
+            требуется помощь, обратитесь к администратору или техническому оператору.
+          </p>
+        </div>
+      </section>
+    {% else %}
+      <section class="space-y-4">
+        <p>
+          Профиль пользователя не настроен. Обратитесь к администратору системы, чтобы назначить роль и получить доступ к нужным
+          разделам портала.
+        </p>
+      </section>
+    {% endif %}
   </div>
 {% endblock %}

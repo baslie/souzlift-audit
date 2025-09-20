@@ -346,3 +346,64 @@ class AdminAccessRestrictionsTests(TestCase):
         app_labels = {app["app_label"].lower() for app in app_list}
         self.assertIn("catalog", app_labels)
         self.assertIn("audits", app_labels)
+
+
+class NavigationRenderingTests(TestCase):
+    """Проверяем, что навигация кабинета соответствует роли пользователя."""
+
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+
+    def test_admin_navigation_hides_django_admin_link(self) -> None:
+        user = self.UserModel.objects.create_user(
+            username="cab-admin",
+            password="StrongPass123!",
+            email="admin@example.com",
+        )
+        profile = user.profile
+        profile.role = UserProfile.Roles.ADMIN
+        profile.mark_password_changed()
+        profile.save(update_fields=["role", "password_changed_at"])
+
+        logged_in = self.client.login(username="cab-admin", password="StrongPass123!")
+        self.assertTrue(logged_in)
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "Кабинет администратора")
+        self.assertContains(response, reverse("catalog:checklist-overview"))
+        self.assertNotContains(response, reverse("admin:index"))
+
+    def test_auditor_navigation_contains_only_auditor_links(self) -> None:
+        user = self.UserModel.objects.create_user(
+            username="cab-auditor",
+            password="StrongPass123!",
+        )
+        user.profile.mark_password_changed()
+        user.profile.save(update_fields=["password_changed_at"])
+
+        logged_in = self.client.login(username="cab-auditor", password="StrongPass123!")
+        self.assertTrue(logged_in)
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "Кабинет аудитора")
+        self.assertContains(response, reverse("audits:audit-list"))
+        self.assertNotContains(response, reverse("catalog:checklist-overview"))
+        self.assertNotContains(response, reverse("admin:index"))
+
+    def test_superuser_sees_django_admin_link(self) -> None:
+        user = self.UserModel.objects.create_superuser(
+            username="tech-operator",
+            email="tech@example.com",
+            password="AdminPass123!",
+        )
+        profile = user.profile
+        profile.role = UserProfile.Roles.ADMIN
+        profile.mark_password_changed()
+        profile.save(update_fields=["role", "password_changed_at"])
+
+        logged_in = self.client.login(username="tech-operator", password="AdminPass123!")
+        self.assertTrue(logged_in)
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, reverse("admin:index"))
+        self.assertContains(response, "Django Admin")
