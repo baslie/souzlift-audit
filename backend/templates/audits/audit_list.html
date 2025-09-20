@@ -2,11 +2,11 @@
 {% load static %}
 {% block title %}Мои аудиты · Союзлифт Аудит{% endblock %}
 {% block header_links %}
-  <a href="{% url 'audits:audit-list' %}" class="font-semibold text-white">Мои аудиты</a>
-  <a href="{% url 'catalog:building-list' %}" class="text-slate-200 hover:text-white">Здания</a>
-  <a href="{% url 'catalog:elevator-list' %}" class="text-slate-200 hover:text-white">Лифты</a>
-  <a href="{% url 'accounts:dashboard' %}" class="text-slate-200 hover:text-white">Личный кабинет</a>
-  <a href="{% url 'accounts:logout' %}" class="text-slate-200 hover:text-white">Выйти</a>
+  <a href="{% url 'audits:audit-list' %}" class="app-header__link aria-current:font-semibold aria-current:text-white" aria-current="page">Мои аудиты</a>
+  <a href="{% url 'catalog:building-list' %}" class="app-header__link">Здания</a>
+  <a href="{% url 'catalog:elevator-list' %}" class="app-header__link">Лифты</a>
+  <a href="{% url 'accounts:dashboard' %}" class="app-header__link">Личный кабинет</a>
+  <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
 {% endblock %}
 {% block heading %}Мои аудиты{% endblock %}
 {% block subheading %}

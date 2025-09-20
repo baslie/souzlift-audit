@@ -8,19 +8,36 @@ from django.utils.translation import gettext_lazy as _
 
 
 class TailwindFormMixin:
-    """Общие настройки оформления для форм аутентификации."""
+    """Общие настройки оформления для форм и элементов ввода."""
 
-    input_css_classes = (
-        "block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm "
-        "focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-    )
-    error_css_classes = "text-sm text-red-600"
-    help_text_css_classes = "text-xs text-slate-500"
+    input_css_classes = "app-input"
+    textarea_css_classes = "app-input app-input--textarea"
+    select_css_classes = "app-input app-input--select"
+    file_css_classes = "app-input app-input--file"
+    checkbox_css_classes = "app-checkbox"
+    error_css_classes = "form-error"
+    help_text_css_classes = "form-help"
 
     def _apply_styling(self) -> None:
         for field in self.fields.values():
-            css_classes = field.widget.attrs.get("class", "")
-            field.widget.attrs["class"] = f"{css_classes} {self.input_css_classes}".strip()
+            widget = field.widget
+            css_classes = widget.attrs.get("class", "").strip()
+            if isinstance(widget, forms.Textarea):
+                base_classes = self.textarea_css_classes
+            elif isinstance(widget, (forms.Select, forms.SelectMultiple)):
+                base_classes = self.select_css_classes
+            elif isinstance(widget, (forms.CheckboxInput, forms.CheckboxSelectMultiple)):
+                base_classes = self.checkbox_css_classes
+            elif isinstance(widget, (forms.FileInput, forms.ClearableFileInput)):
+                base_classes = self.file_css_classes
+            else:
+                base_classes = self.input_css_classes
+
+            widget.attrs["class"] = " ".join(filter(None, [css_classes, base_classes]))
+
+            if isinstance(widget, forms.CheckboxInput):
+                widget.attrs.setdefault("aria-checked", "false")
+
             if field.help_text:
                 field.help_text = format_html(
                     '<span class="{}">{}</span>', self.help_text_css_classes, field.help_text
