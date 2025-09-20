@@ -40,7 +40,7 @@
         </dd>
       </div>
     </dl>
-    <div class="grid gap-4 sm:grid-cols-3">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <a
         href="{% url 'audits:audit-list' %}"
         class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-100"
@@ -65,6 +65,16 @@
         <span class="text-lg font-semibold">Лифты</span>
         <span class="text-xs text-ink-500">Ведите учёт лифтов, их статуса и описания.</span>
       </a>
+      {% if profile and profile.is_admin %}
+        <a
+          href="{% url 'catalog:checklist-overview' %}"
+          class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-surface-elevated p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-50"
+        >
+          <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Настройки</span>
+          <span class="text-lg font-semibold">Чек-лист</span>
+          <span class="text-xs text-ink-500">Управляйте структурами вопросов и вариантами оценок для аудитов.</span>
+        </a>
+      {% endif %}
     </div>
   </div>
 {% endblock %}

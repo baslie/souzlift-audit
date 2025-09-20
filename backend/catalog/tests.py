@@ -328,6 +328,141 @@ class ChecklistValidationTests(TestCase):
         question.validate_answer(score=None, comment="Описание состояния")
 
 
+class ChecklistAdminViewsTests(TestCase):
+    """Покрывает пользовательский интерфейс конструктора чек-листа."""
+
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+        self.admin = self.UserModel.objects.create_user(username="admin", password="StrongPass123")
+        self.admin.profile.role = UserProfile.Roles.ADMIN
+        self.admin.profile.mark_password_changed()
+        self.admin.profile.save(update_fields=["role", "password_changed_at"])
+
+        self.auditor = self.UserModel.objects.create_user(username="auditor", password="StrongPass123")
+        self.auditor.profile.mark_password_changed()
+        self.auditor.profile.save(update_fields=["password_changed_at"])
+
+    def test_overview_requires_admin_and_shows_preview(self) -> None:
+        """Доступ ограничен ролью администратора, а предпросмотр содержит собранную структуру."""
+
+        category = ChecklistCategory.objects.create(code="safety", name="Безопасность", order=0)
+        section = ChecklistSection.objects.create(category=category, title="Общие требования", order=0)
+        question = ChecklistQuestion.objects.create(
+            section=section,
+            text="Исправность оборудования",
+            type=ChecklistQuestion.QuestionType.SCORE,
+            max_score=5,
+            order=0,
+        )
+        ScoreOption.objects.create(question=question, score=5, description="Норма", order=0)
+
+        self.client.force_login(self.auditor)
+        forbidden = self.client.get(reverse("catalog:checklist-overview"))
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("catalog:checklist-overview"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["category_count"], 1)
+        self.assertEqual(response.context["section_count"], 1)
+        self.assertEqual(response.context["question_count"], 1)
+        preview = response.context["checklist_preview"]
+        self.assertEqual(preview["total_questions"], 1)
+        self.assertIn("generated_at", preview)
+        self.assertIn("preview_generated_at", response.context)
+
+    def test_admin_can_create_nested_entities(self) -> None:
+        """Через формы можно создать полный набор элементов чек-листа."""
+
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("catalog:checklist-category-create"),
+            data={"code": "main", "name": "Основная", "order": 0},
+        )
+        self.assertRedirects(response, reverse("catalog:checklist-overview"))
+        category = ChecklistCategory.objects.get(code="main")
+        self.assertEqual(category.order, 0)
+
+        response = self.client.post(
+            reverse("catalog:checklist-category-create"),
+            data={"code": "safety", "name": "Безопасность", "order": 0},
+        )
+        self.assertRedirects(response, reverse("catalog:checklist-overview"))
+        other_category = ChecklistCategory.objects.get(code="safety")
+        self.assertGreater(other_category.order, category.order)
+
+        response = self.client.post(
+            reverse("catalog:checklist-section-create", args=[category.pk]),
+            data={
+                "category": category.pk,
+                "title": "Инспекция",
+                "description": "Базовые проверки",
+                "order": 0,
+            },
+        )
+        self.assertRedirects(response, reverse("catalog:checklist-overview"))
+        section = category.sections.get(title="Инспекция")
+
+        response = self.client.post(
+            reverse("catalog:checklist-question-create", args=[section.pk]),
+            data={
+                "section": section.pk,
+                "text": "Проверка механики",
+                "type": ChecklistQuestion.QuestionType.SCORE,
+                "max_score": 5,
+                "guideline": "",
+                "requires_comment": "",
+                "order": 0,
+            },
+        )
+        self.assertRedirects(response, reverse("catalog:checklist-overview"))
+        question = section.questions.get(text="Проверка механики")
+
+        response = self.client.post(
+            reverse("catalog:checklist-option-create", args=[question.pk]),
+            data={
+                "question": question.pk,
+                "score": 5,
+                "description": "Соответствует требованиям",
+                "order": 0,
+            },
+        )
+        self.assertRedirects(response, reverse("catalog:checklist-overview"))
+        option = question.score_options.get(score=5)
+        self.assertEqual(option.description, "Соответствует требованиям")
+
+    def test_reorder_questions_swaps_positions(self) -> None:
+        """Перемещение вопросов обновляет порядок внутри секции."""
+
+        category = ChecklistCategory.objects.create(code="main", name="Основная", order=0)
+        section = ChecklistSection.objects.create(category=category, title="Секция", order=0)
+        first = ChecklistQuestion.objects.create(
+            section=section,
+            text="Первый",
+            type=ChecklistQuestion.QuestionType.SCORE,
+            max_score=5,
+            order=0,
+        )
+        second = ChecklistQuestion.objects.create(
+            section=section,
+            text="Второй",
+            type=ChecklistQuestion.QuestionType.SCORE,
+            max_score=5,
+            order=1,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("catalog:checklist-question-move", args=[second.pk]),
+            data={"direction": "up", "next": reverse("catalog:checklist-overview")},
+        )
+        self.assertRedirects(response, reverse("catalog:checklist-overview"))
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.order, 1)
+        self.assertEqual(second.order, 0)
+
 class ChecklistAdminActionsTests(TestCase):
     """Covers helper actions in the checklist admin interface."""
 
