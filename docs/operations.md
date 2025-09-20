@@ -29,6 +29,17 @@
 - Для логирования задайте базовый каталог `DJANGO_LOG_DIR` (например, `/var/log/souzlift`), основной файл `DJANGO_LOG_FILE` с параметрами ротации `DJANGO_LOG_MAX_BYTES` и `DJANGO_LOG_BACKUP_COUNT`, а также отдельный журнал ошибок офлайн-синхронизации через `DJANGO_SYNC_LOG_FILE`, `DJANGO_SYNC_LOG_MAX_BYTES`, `DJANGO_SYNC_LOG_BACKUP_COUNT`.
 - Параметры HTTPS (HSTS, редиректы) можно скорректировать переменными `DJANGO_SECURE_SSL_REDIRECT`, `DJANGO_SECURE_HSTS_SECONDS`, `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS`, `DJANGO_SECURE_HSTS_PRELOAD`, `DJANGO_SECURE_REFERRER_POLICY` в зависимости от инфраструктуры заказчика.
 
+#### 1.2.2. Контрольный список перед релизом
+
+- [ ] Все задачи релиза закрыты и статусы в [AGENTS.md](../AGENTS.md) актуальны.
+- [ ] Проверены результаты автоматизированных тестов (см. п. 2) и приложены к отчёту о релизе.
+- [ ] Обновлена пользовательская и техническая документация (README, инструкции, схемы), отражены изменения UX.
+- [ ] Подготовлен changelog и перечень ключевых изменений для заказчика.
+- [ ] Проверена актуальность переменных окружения и секретов (см. §1.2.1) на целевых серверах.
+- [ ] Убедитесь, что резервное копирование (раздел 2) отработало успешно за последние 24 часа и есть план отката.
+- [ ] Подтверждены окно обслуживания и список ответственных за релиз и поддержку пользователей.
+- [ ] Актуализированы инструкции по smoke-проверкам и проверены учётные записи для тестирования.
+
 ### 1.3. Развёртывание на продакшене
 
 1. Зайти на сервер под учётной записью администратора приложения.
@@ -37,15 +48,14 @@
    sudo systemctl stop gunicorn
    ```
 3. Зафиксировать резервные копии (см. раздел 2).
-4. Обновить код и зависимости:
+4. Обновить код и зависимости (выполняется от имени системного пользователя приложения, например `appuser`):
    ```bash
-   git fetch --all
-   git checkout main
-   git pull --ff-only
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   python manage.py migrate
-   python manage.py collectstatic --noinput
+   sudo -u appuser git fetch --all
+   sudo -u appuser git checkout main
+   sudo -u appuser git pull --ff-only
+   sudo -u appuser /opt/souzlift/.venv/bin/pip install -r requirements.txt
+   sudo -u appuser DJANGO_ENV=prod /opt/souzlift/.venv/bin/python manage.py migrate --noinput
+   sudo -u appuser DJANGO_ENV=prod /opt/souzlift/.venv/bin/python manage.py collectstatic --noinput
    ```
 5. Прогнать smoke-проверки:
    ```bash
@@ -61,6 +71,17 @@
    ```
 7. Выполнить контрольный заход в админку и портал аудитора, убедиться в доступности статических файлов и медиа.
 8. Закрыть релиз в трекере задач, приложив список изменений и результаты проверок.
+
+#### 1.3.1. Контрольный список обновления
+
+- [ ] Перед началом работ `git status --short` на сервере не содержит незакоммиченных изменений.
+- [ ] Выполнены команды `git fetch --all` и `git pull --ff-only`, зафиксирован идентификатор релиза (`git rev-parse HEAD`).
+- [ ] Обновлены зависимости через `/opt/souzlift/.venv/bin/pip install -r requirements.txt` и сохранён лог установки.
+- [ ] Применены миграции `DJANGO_ENV=prod python manage.py migrate --noinput` без ошибок.
+- [ ] Выполнена сборка статики `DJANGO_ENV=prod python manage.py collectstatic --noinput`, проверен размер каталога `staticfiles`.
+- [ ] Службы `gunicorn` и `nginx` перезапущены и находятся в состоянии `active (running)` (`systemctl status`).
+- [ ] Smoke-проверки из шага 5 завершились успешно, результаты задокументированы.
+- [ ] На тестовом устройстве аудитора очищены кэши браузера/сервис-воркера при изменении фронтенда.
 
 ### 1.4. Пост-релизный мониторинг
 
