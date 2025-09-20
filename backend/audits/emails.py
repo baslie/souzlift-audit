@@ -78,6 +78,35 @@ def notify_audit_reviewed(audit: "Audit") -> None:
     send_plain_email(subject, "\n".join(message_lines), [email])
 
 
+def notify_audit_changes_requested(
+    audit: "Audit", message: str, *, actor: object | None = None
+) -> None:
+    """Inform the auditor that an administrator requested additional changes."""
+
+    author = getattr(audit, "created_by", None)
+    email = getattr(author, "email", "") or ""
+    if not email.strip():
+        return
+
+    subject = f"Запрошены правки: {audit}"
+    actor_label = _format_user_label(actor)
+    portal_url = reverse("audits:audit-list")
+    message_lines = [
+        "Администратор запросил внести изменения в аудит.",
+        "",
+        f"Идентификатор аудита: {audit.pk}",
+        f"Объект: {audit.elevator}",
+        f"Администратор: {actor_label}",
+        "",
+        "Комментарий администратора:",
+        message,
+        "",
+        f"Текущий статус: {audit.get_status_display()}",
+        f"Список аудитов: {portal_url}",
+    ]
+    send_plain_email(subject, "\n".join(message_lines), [email])
+
+
 def notify_offline_sync_error(batch: "OfflineSyncBatch") -> None:
     """Notify administrators about an offline synchronisation error."""
 
@@ -107,6 +136,7 @@ def notify_offline_sync_error(batch: "OfflineSyncBatch") -> None:
 
 
 __all__ = [
+    "notify_audit_changes_requested",
     "notify_audit_reviewed",
     "notify_audit_submitted",
     "notify_offline_sync_error",

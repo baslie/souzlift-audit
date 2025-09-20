@@ -75,6 +75,23 @@ class AuditLogEntryTests(ProtectedMediaTestCase):
         self.assertEqual(entry.payload.get("from"), Audit.Status.DRAFT)
         self.assertEqual(entry.payload.get("to"), Audit.Status.IN_PROGRESS)
 
+    def test_request_changes_is_logged(self) -> None:
+        audit = self._create_audit()
+        audit.start(actor=self.auditor)
+        audit.submit(actor=self.auditor)
+
+        audit.request_changes(actor=self.admin, message="Добавьте фотографии лифта.")
+
+        entry = AuditLogEntry.objects.filter(
+            action=AuditLogEntry.Action.AUDIT_CHANGES_REQUESTED,
+            entity_id=str(audit.pk),
+        ).first()
+        self.assertIsNotNone(entry)
+        assert entry is not None
+        self.assertEqual(entry.user, self.admin)
+        self.assertEqual(entry.payload.get("status"), Audit.Status.SUBMITTED)
+        self.assertIn("фотографии", entry.payload.get("message", ""))
+
     def test_response_lifecycle_is_logged(self) -> None:
         audit = self._create_audit()
         response = AuditResponse.objects.create(audit=audit, question=self.question, score=5)

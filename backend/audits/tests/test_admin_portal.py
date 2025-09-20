@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import UserProfile
-from audits.models import Audit
+from audits.models import Audit, AuditLogEntry
 from catalog.models import Building, Elevator
 
 
@@ -143,4 +143,38 @@ class AdminAuditPortalTests(TestCase):
         self.assertEqual(self.audit_submitted.status, Audit.Status.REVIEWED)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("просмотр", mail.outbox[0].subject.lower())
+
+    def test_request_changes_sends_email_and_logs(self) -> None:
+        """Администратор может запросить правки и уведомить автора."""
+
+        self.client.force_login(self.admin)
+        mail.outbox.clear()
+
+        response = self.client.post(
+            reverse("audits:audit-request-changes", args=[self.audit_submitted.pk]),
+            {
+                "message": "Пожалуйста, дополните фотографии машинного отделения.",
+                "next": self.list_url,
+            },
+        )
+
+        self.assertRedirects(response, self.list_url)
+
+        self.audit_submitted.refresh_from_db()
+        self.assertEqual(self.audit_submitted.status, Audit.Status.SUBMITTED)
+
+        log_entry = AuditLogEntry.objects.filter(
+            action=AuditLogEntry.Action.AUDIT_CHANGES_REQUESTED,
+            entity_id=str(self.audit_submitted.pk),
+        ).first()
+        self.assertIsNotNone(log_entry)
+        assert log_entry is not None
+        self.assertEqual(log_entry.user, self.admin)
+        self.assertIn("машинного отделения", log_entry.payload.get("message", ""))
+
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertIn("правк", message.subject.lower())
+        self.assertIn("машинного", message.body)
+        self.assertEqual(message.recipients(), ["auditor@example.com"])
 
