@@ -142,6 +142,18 @@ class QuerysetRestrictionTests(TestCase):
         filtered = restrict_queryset_for_user(queryset, self.auditor)
         self.assertEqual(list(filtered), [self.auditor.profile])
 
+    def test_user_with_unknown_role_gets_no_results(self) -> None:
+        outsider = self.UserModel.objects.create_user(
+            username="outsider",
+            password="StrongPass123",
+        )
+        outsider.profile.role = "MANAGER"
+        outsider.profile.save(update_fields=["role"])
+
+        queryset = UserProfile.objects.order_by("pk")
+        filtered = restrict_queryset_for_user(queryset, outsider)
+        self.assertEqual(list(filtered), [])
+
 
 class UserNotificationTests(TestCase):
     def setUp(self) -> None:

@@ -67,6 +67,8 @@ class RoleRequiredMixin(LoginRequiredMixin):
         return not allowed or profile.role in allowed
 
     def dispatch(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:
+        if not getattr(request.user, "is_authenticated", False):
+            return self.handle_no_permission()
         if not self.has_role_permission():
             raise PermissionDenied("Недостаточно прав для выполнения операции.")
         return super().dispatch(request, *args, **kwargs)
@@ -108,8 +110,12 @@ def restrict_queryset_for_user(
     profile = _get_profile(user)
     if profile is None:
         return queryset.none()
+
     if profile.is_admin:
         return queryset
+
+    if not profile.is_auditor:
+        return queryset.none()
 
     if auditor_field:
         try:
