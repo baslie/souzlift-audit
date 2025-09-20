@@ -1,0 +1,28 @@
+[Unit]
+Description=Souzlift Audit gunicorn service
+Requires=network.target
+After=network.target
+
+[Service]
+Type=simple
+User=appuser
+Group=www-data
+WorkingDirectory=/opt/souzlift
+EnvironmentFile=/etc/souzlift.env
+RuntimeDirectory=gunicorn
+RuntimeDirectoryMode=0755
+PIDFile=/run/gunicorn/gunicorn.pid
+UMask=0007
+ExecStartPre=/bin/mkdir -p /var/log/souzlift
+ExecStartPre=/bin/chown appuser:www-data /var/log/souzlift
+ExecStart=/opt/souzlift/.venv/bin/gunicorn --config /opt/souzlift/deploy/gunicorn.conf.py backend.config.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillMode=mixed
+PrivateTmp=true
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
