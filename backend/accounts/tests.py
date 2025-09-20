@@ -293,3 +293,56 @@ class UserAdminInlineTests(TestCase):
         self.assertEqual(profile.role, UserProfile.Roles.ADMIN)
         self.assertEqual(profile.phone, "+7 999 111-22-33")
         self.assertEqual(profile.employee_id, "ADM-001")
+
+
+class AdminAccessRestrictionsTests(TestCase):
+    """Ensure Django Admin разделён между техническими и прикладными ролями."""
+
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+        self.superuser = self.UserModel.objects.create_superuser(
+            username="operator",
+            email="operator@example.com",
+            password="OperatorPass123!",
+        )
+        self.superuser.profile.mark_password_changed()
+        self.superuser.profile.save(update_fields=["password_changed_at"])
+        self.staff_admin = self.UserModel.objects.create_user(
+            username="manager",
+            password="StrongPass123!",
+            is_staff=True,
+        )
+        self.staff_admin.profile.role = UserProfile.Roles.ADMIN
+        self.staff_admin.profile.mark_password_changed()
+        self.staff_admin.profile.save(update_fields=["role", "password_changed_at"])
+
+    def test_staff_admin_cannot_access_hidden_sections(self) -> None:
+        self.client.force_login(self.staff_admin)
+
+        response = self.client.get(reverse("admin:catalog_building_changelist"))
+        self.assertEqual(response.status_code, 403)
+
+        response = self.client.get(reverse("admin:audits_audit_changelist"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_admin_does_not_see_catalog_or_audits_apps(self) -> None:
+        self.client.force_login(self.staff_admin)
+
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+
+        app_list = response.context.get("app_list", [])
+        app_labels = {app["app_label"].lower() for app in app_list}
+        self.assertNotIn("catalog", app_labels)
+        self.assertNotIn("audits", app_labels)
+
+    def test_superuser_retains_full_admin_access(self) -> None:
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+
+        app_list = response.context.get("app_list", [])
+        app_labels = {app["app_label"].lower() for app in app_list}
+        self.assertIn("catalog", app_labels)
+        self.assertIn("audits", app_labels)

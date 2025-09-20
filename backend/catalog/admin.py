@@ -9,6 +9,8 @@ from django.db.models import Count, Max
 from django.utils.text import Truncator
 from django.utils.translation import gettext_lazy as _
 
+from config.admin import SuperuserOnlyAdminMixin
+
 from .models import (
     Building,
     ChecklistCategory,
@@ -39,7 +41,7 @@ def return_to_review(modeladmin, request, queryset):
 
 
 @admin.register(Building)
-class BuildingAdmin(admin.ModelAdmin):
+class BuildingAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     """Admin configuration for managing buildings."""
 
     list_display = ("address", "entrance", "review_status", "created_by", "verified_by", "created_at")
@@ -56,7 +58,7 @@ class BuildingAdmin(admin.ModelAdmin):
 
 
 @admin.register(Elevator)
-class ElevatorAdmin(admin.ModelAdmin):
+class ElevatorAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     """Admin configuration for managing elevators."""
 
     list_display = (
@@ -120,7 +122,7 @@ class ScoreOptionInline(admin.TabularInline):
 
 
 @admin.register(ChecklistCategory)
-class ChecklistCategoryAdmin(admin.ModelAdmin):
+class ChecklistCategoryAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     """Admin configuration for checklist categories."""
 
     list_display = ("name", "code", "order", "section_total")
@@ -152,7 +154,7 @@ class SectionMoveActionForm(ActionForm):
 
 
 @admin.register(ChecklistSection)
-class ChecklistSectionAdmin(admin.ModelAdmin):
+class ChecklistSectionAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     """Admin configuration for checklist sections."""
 
     list_display = ("title", "category", "order", "question_total")
@@ -233,7 +235,7 @@ class ChecklistSectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(ChecklistQuestion)
-class ChecklistQuestionAdmin(admin.ModelAdmin):
+class ChecklistQuestionAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     """Admin configuration for checklist questions."""
 
     list_display = (
@@ -282,7 +284,7 @@ class ChecklistQuestionAdmin(admin.ModelAdmin):
 
 
 @admin.register(ObjectInfoField)
-class ObjectInfoFieldAdmin(admin.ModelAdmin):
+class ObjectInfoFieldAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     """Admin configuration for configurable object information fields."""
 
     list_display = ("label", "code", "field_type", "is_required", "order")

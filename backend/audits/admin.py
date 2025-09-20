@@ -8,6 +8,8 @@ from django.db.models import Avg, Count, Prefetch, Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from config.admin import SuperuserOnlyAdminMixin
+
 from . import models
 from .reporting import build_audit_report
 from .services import build_checklist_structure
@@ -75,7 +77,7 @@ class AuditDueFilter(admin.SimpleListFilter):
 
 
 @admin.register(models.Audit)
-class AuditAdmin(admin.ModelAdmin):
+class AuditAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/audits/audit/change_list.html"
     change_form_template = "admin/audits/audit/change_form.html"
     list_display = (
@@ -275,28 +277,28 @@ class AuditAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.AuditResponse)
-class AuditResponseAdmin(admin.ModelAdmin):
+class AuditResponseAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("id", "audit", "question", "score", "is_flagged")
     list_filter = ("is_flagged",)
     search_fields = ("audit__elevator__identifier", "question__text")
 
 
 @admin.register(models.AuditAttachment)
-class AuditAttachmentAdmin(admin.ModelAdmin):
+class AuditAttachmentAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("id", "response", "stored_size", "uploaded_at")
     search_fields = ("response__audit__elevator__identifier",)
     readonly_fields = ("stored_size", "uploaded_at")
 
 
 @admin.register(models.AuditSignature)
-class AuditSignatureAdmin(admin.ModelAdmin):
+class AuditSignatureAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("audit", "signed_by", "signed_at")
     search_fields = ("audit__elevator__identifier", "signed_by")
     readonly_fields = ("signed_at",)
 
 
 @admin.register(models.AuditLogEntry)
-class AuditLogEntryAdmin(admin.ModelAdmin):
+class AuditLogEntryAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("created_at", "action", "entity_type", "entity_id", "user")
     list_filter = ("action", "entity_type")
     search_fields = ("entity_type", "entity_id", "payload")
