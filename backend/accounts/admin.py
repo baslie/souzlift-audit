@@ -8,6 +8,7 @@ from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.forms.models import BaseInlineFormSet
 from django.utils.translation import gettext_lazy as _
 
 from .models import UserProfile
@@ -76,8 +77,32 @@ class UserProfileAdmin(admin.ModelAdmin):
     )
 
 
+class UserProfileInlineFormSet(BaseInlineFormSet):
+    """Формсет, обновляющий существующий профиль вместо создания дубликата."""
+
+    def save_new(self, form, commit: bool = True):  # type: ignore[override]
+        if self._should_delete_form(form):
+            return super().save_new(form, commit=commit)
+
+        profile, _ = UserProfile.objects.get_or_create(user=self.instance)
+
+        for field_name, value in form.cleaned_data.items():
+            if field_name in {"id", "DELETE"}:
+                continue
+            if field_name not in form.fields:
+                continue
+            setattr(profile, field_name, value)
+
+        if commit:
+            profile.save()
+
+        form.instance = profile
+        return profile
+
+
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
+    formset = UserProfileInlineFormSet
     can_delete = False
     extra = 0
     max_num = 1
