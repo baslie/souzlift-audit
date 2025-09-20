@@ -21,6 +21,7 @@ class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = get_user_model()
         django_get_or_create = ("username",)
+        skip_postgeneration_save = True
 
     username = factory.Sequence(lambda n: f"user{n}")
     email = factory.LazyAttribute(lambda obj: f"{obj.username}@example.com")
@@ -122,6 +123,7 @@ class ChecklistQuestionFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = catalog_models.ChecklistQuestion
+        skip_postgeneration_save = True
 
     section = factory.SubFactory(ChecklistSectionFactory)
     text = factory.Sequence(lambda n: f"Вопрос {n}")
@@ -154,6 +156,7 @@ class ScoreOptionFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = catalog_models.ScoreOption
+        skip_postgeneration_save = True
 
     question = factory.SubFactory(ChecklistQuestionFactory)
     order = factory.Sequence(lambda n: n + 1)
@@ -189,6 +192,7 @@ class AuditFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = audits_models.Audit
+        skip_postgeneration_save = True
 
     elevator = factory.SubFactory(ElevatorFactory)
     created_by = factory.SubFactory(AuditorUserFactory)
@@ -211,6 +215,7 @@ class AuditResponseFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = audits_models.AuditResponse
+        skip_postgeneration_save = True
 
     audit = factory.SubFactory(AuditFactory)
     question = factory.SubFactory(ChecklistQuestionFactory)
