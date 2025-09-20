@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 from django.urls import reverse
 
-from audits.services import build_audit_filter_snapshot, build_checklist_structure
+from audits.services import (
+    build_audit_filter_snapshot,
+    build_catalog_snapshot_for_user,
+    build_checklist_structure,
+)
 
 from .factories import (
     AdminUserFactory,
@@ -31,6 +35,40 @@ def test_checklist_structure_exposes_path_metadata(client) -> None:
     assert question_data["category_name"] == question.section.category.name
     assert question_data["section_id"] == question.section_id
     assert question_data["section_title"] == question.section.title
+
+
+@pytest.mark.django_db
+def test_catalog_snapshot_service_includes_optional_sections() -> None:
+    """Service should embed checklist and filters when requested."""
+
+    admin_user = AdminUserFactory()
+    auditor_user = AuditorUserFactory()
+    ChecklistQuestionFactory()
+
+    admin_snapshot = build_catalog_snapshot_for_user(
+        admin_user,
+        include_checklist=True,
+        include_filters=True,
+    )
+    assert "checklist" in admin_snapshot
+    assert admin_snapshot["checklist"]["categories"], "Checklist should contain categories"
+    admin_filters = admin_snapshot.get("audit_filters", {})
+    assert "status" in admin_filters
+    assert "period" in admin_filters
+    assert "review" in admin_filters
+    assert any(option["value"] == "pending" for option in admin_filters["review"])
+
+    auditor_snapshot = build_catalog_snapshot_for_user(
+        auditor_user,
+        include_checklist=True,
+        include_filters=True,
+    )
+    assert "checklist" in auditor_snapshot
+    assert auditor_snapshot["checklist"]["categories"], "Checklist should contain categories"
+    auditor_filters = auditor_snapshot.get("audit_filters", {})
+    assert "status" in auditor_filters
+    assert "period" in auditor_filters
+    assert "review" not in auditor_filters
 
 
 @pytest.mark.django_db
