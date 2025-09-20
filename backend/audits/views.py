@@ -207,7 +207,7 @@ class AuditListView(RoleQuerysetMixin, ListView):
             }
         )
         badge_classes = self.get_status_badge_classes()
-        default_class = "border-slate-200 bg-slate-50 text-slate-600"
+        default_class = "border-border-subtle bg-surface-subtle text-ink-600"
         page_obj = context.get("page_obj")
         if page_obj is None:
             possible_page = context.get(self.context_object_name)
@@ -222,10 +222,10 @@ class AuditListView(RoleQuerysetMixin, ListView):
     @staticmethod
     def get_status_badge_classes() -> dict[str, str]:
         return {
-            Audit.Status.DRAFT: "border-slate-300 bg-slate-50 text-slate-700",
-            Audit.Status.IN_PROGRESS: "border-amber-200 bg-amber-50 text-amber-800",
-            Audit.Status.SUBMITTED: "border-sky-200 bg-sky-50 text-sky-800",
-            Audit.Status.REVIEWED: "border-emerald-200 bg-emerald-50 text-emerald-800",
+            Audit.Status.DRAFT: "border-border bg-surface-muted text-ink-700",
+            Audit.Status.IN_PROGRESS: "border-warning-200 bg-warning-50 text-warning-700",
+            Audit.Status.SUBMITTED: "border-brand-200 bg-brand-50 text-brand-700",
+            Audit.Status.REVIEWED: "border-success-200 bg-success-50 text-success-700",
         }
 
 
