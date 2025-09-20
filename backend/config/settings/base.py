@@ -139,6 +139,36 @@ LOGIN_REDIRECT_URL = reverse_lazy("accounts:dashboard")
 LOGOUT_REDIRECT_URL = reverse_lazy("accounts:login")
 
 LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO")
+
+
+def _resolve_log_path(env_var: str, default: Path) -> Path:
+    """Resolve a log file path and ensure that its directory exists."""
+
+    candidate = os.environ.get(env_var)
+    path = Path(candidate) if candidate else default
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # In restricted environments (e.g. read-only directories) we silently
+        # ignore the error. Logging will still work if the path is writable.
+        pass
+    return path
+
+
+LOG_DIR = Path(os.environ.get("DJANGO_LOG_DIR", BASE_DIR / "logs"))
+MAIN_LOG_FILE = _resolve_log_path("DJANGO_LOG_FILE", LOG_DIR / "app.log")
+OFFLINE_SYNC_LOG_FILE = _resolve_log_path(
+    "DJANGO_SYNC_LOG_FILE", LOG_DIR / "offline-sync-errors.log"
+)
+LOG_ROTATION_MAX_BYTES = env_int("DJANGO_LOG_MAX_BYTES", 5 * 1024 * 1024)
+LOG_ROTATION_BACKUP_COUNT = env_int("DJANGO_LOG_BACKUP_COUNT", 10)
+OFFLINE_SYNC_LOG_MAX_BYTES = env_int(
+    "DJANGO_SYNC_LOG_MAX_BYTES", LOG_ROTATION_MAX_BYTES
+)
+OFFLINE_SYNC_LOG_BACKUP_COUNT = env_int(
+    "DJANGO_SYNC_LOG_BACKUP_COUNT", LOG_ROTATION_BACKUP_COUNT
+)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -156,6 +186,26 @@ LOGGING = {
             "formatter": "verbose",
             "level": LOG_LEVEL,
         },
+        "app_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "verbose",
+            "filename": str(MAIN_LOG_FILE),
+            "maxBytes": LOG_ROTATION_MAX_BYTES,
+            "backupCount": LOG_ROTATION_BACKUP_COUNT,
+            "encoding": "utf-8",
+            "level": LOG_LEVEL,
+            "delay": True,
+        },
+        "offline_sync_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "verbose",
+            "filename": str(OFFLINE_SYNC_LOG_FILE),
+            "maxBytes": OFFLINE_SYNC_LOG_MAX_BYTES,
+            "backupCount": OFFLINE_SYNC_LOG_BACKUP_COUNT,
+            "encoding": "utf-8",
+            "level": "INFO",
+            "delay": True,
+        },
     },
     "loggers": {
         "django": {
@@ -166,6 +216,11 @@ LOGGING = {
         "django.request": {
             "handlers": ["console"],
             "level": "ERROR",
+            "propagate": False,
+        },
+        "audits.offline_sync": {
+            "handlers": ["console"],
+            "level": "INFO",
             "propagate": False,
         },
     },
@@ -215,7 +270,14 @@ __all__ = [
     "LOGIN_URL",
     "LOGIN_REDIRECT_URL",
     "LOGOUT_REDIRECT_URL",
+    "LOG_DIR",
+    "MAIN_LOG_FILE",
+    "OFFLINE_SYNC_LOG_FILE",
     "LOG_LEVEL",
+    "LOG_ROTATION_MAX_BYTES",
+    "LOG_ROTATION_BACKUP_COUNT",
+    "OFFLINE_SYNC_LOG_MAX_BYTES",
+    "OFFLINE_SYNC_LOG_BACKUP_COUNT",
     "LOGGING",
     "env_bool",
     "env_int",

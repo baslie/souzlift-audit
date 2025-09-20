@@ -8,8 +8,6 @@ from django.urls import reverse
 from accounts.emails import get_active_admin_emails, send_plain_email
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
-    from django.contrib.auth import get_user_model
-
     from .models import Audit, OfflineSyncBatch
 
 

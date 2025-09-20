@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from collections.abc import Mapping
+import json
+import logging
 from typing import Any, Final
 
 from django.conf import settings
@@ -18,6 +20,8 @@ from .tokens import build_attachment_token
 MAX_ATTACHMENT_SIZE_BYTES: Final[int] = 8 * 1024 * 1024
 MAX_ATTACHMENTS_PER_RESPONSE: Final[int] = 10
 MAX_ATTACHMENTS_PER_AUDIT: Final[int] = 100
+
+sync_logger = logging.getLogger("audits.offline_sync")
 
 
 def _consume_log_actor(instance: object) -> Any | None:
@@ -1044,8 +1048,41 @@ class OfflineSyncBatch(models.Model):
 
             notify_offline_sync_error(self)
 
+        self._log_offline_sync_error(status)
+
     def __str__(self) -> str:
         status_label = self.get_status_display()
         identifier = self.pk if self.pk is not None else "pending"
         return f"Batch #{identifier} ({status_label})"
+
+    def _log_offline_sync_error(self, status: int) -> None:
+        """Log structured information about offline sync errors."""
+
+        if not sync_logger.isEnabledFor(logging.ERROR):
+            return
+
+        user_identifier: Any = self.user_id if self.user_id is not None else "anonymous"
+        payload_kind = None
+        if isinstance(self.payload, Mapping):
+            payload_kind = self.payload.get("kind")
+
+        try:
+            details_serialized = json.dumps(
+                self.error_details,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        except TypeError:
+            details_serialized = repr(self.error_details)
+
+        sync_logger.error(
+            "Offline sync error: batch=%s device=%s user=%s kind=%s status=%s payload_hash=%s details=%s",
+            self.pk or "unsaved",
+            self.device_id or "-",
+            user_identifier,
+            payload_kind or "-",
+            status,
+            self.payload_hash or "-",
+            details_serialized,
+        )
 
