@@ -5,6 +5,7 @@ from typing import Any
 
 from django.db.models import Prefetch
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from catalog.models import (
     Building,
@@ -15,6 +16,9 @@ from catalog.models import (
     ObjectInfoField,
     ScoreOption,
 )
+
+from accounts.permissions import is_admin
+from audits.models import Audit
 
 
 def _serialise_building(building: Building) -> dict[str, Any]:
@@ -59,19 +63,32 @@ def _serialise_object_info_field(field: ObjectInfoField) -> dict[str, Any]:
     }
 
 
-def build_catalog_snapshot_for_user(user: object) -> dict[str, Any]:
-    """Return a catalogue snapshot containing buildings, elevators and object fields."""
+def build_catalog_snapshot_for_user(
+    user: object,
+    *,
+    include_checklist: bool = False,
+    include_filters: bool = False,
+) -> dict[str, Any]:
+    """Return catalogue data visible to the user for offline consumption."""
 
     buildings_qs = Building.objects.visible_for_user(user).select_related("created_by__profile")
     elevators_qs = Elevator.objects.visible_for_user(user).select_related("building")
     fields_qs = ObjectInfoField.objects.all().order_by("order", "label")
 
-    return {
+    snapshot: dict[str, Any] = {
         "generated_at": timezone.now().isoformat(),
         "buildings": [_serialise_building(item) for item in buildings_qs],
         "elevators": [_serialise_elevator(item) for item in elevators_qs],
         "object_fields": [_serialise_object_info_field(item) for item in fields_qs],
     }
+
+    if include_checklist:
+        snapshot["checklist"] = build_checklist_structure()
+
+    if include_filters:
+        snapshot["audit_filters"] = build_audit_filter_snapshot(user)
+
+    return snapshot
 
 
 def _serialise_score_option(option: ScoreOption) -> dict[str, Any]:
@@ -85,7 +102,12 @@ def _serialise_score_option(option: ScoreOption) -> dict[str, Any]:
     }
 
 
-def _serialise_question(question: ChecklistQuestion) -> dict[str, Any]:
+def _serialise_question(
+    question: ChecklistQuestion,
+    *,
+    section: ChecklistSection | None = None,
+    category: ChecklistCategory | None = None,
+) -> dict[str, Any]:
     """Serialise a checklist question along with its available options."""
 
     score_options = []
@@ -99,7 +121,7 @@ def _serialise_question(question: ChecklistQuestion) -> dict[str, Any]:
                     requires_comment_on_reduced_score = True
                     break
 
-    return {
+    data = {
         "id": question.pk,
         "text": question.text,
         "type": question.type,
@@ -110,12 +132,30 @@ def _serialise_question(question: ChecklistQuestion) -> dict[str, Any]:
         "score_options": score_options,
     }
 
+    if section is not None:
+        data["section_id"] = section.pk
+        data["section_title"] = section.title
 
-def _serialise_section(section: ChecklistSection) -> dict[str, Any]:
+    if category is not None:
+        data["category_id"] = category.pk
+        data["category_code"] = category.code
+        data["category_name"] = category.name
+
+    return data
+
+
+def _serialise_section(
+    section: ChecklistSection,
+    *,
+    category: ChecklistCategory | None = None,
+) -> dict[str, Any]:
     """Serialise a checklist section with ordered questions."""
 
-    questions = [_serialise_question(question) for question in section.questions.all()]
-    return {
+    questions = [
+        _serialise_question(question, section=section, category=category)
+        for question in section.questions.all()
+    ]
+    data = {
         "id": section.pk,
         "title": section.title,
         "description": section.description,
@@ -123,11 +163,19 @@ def _serialise_section(section: ChecklistSection) -> dict[str, Any]:
         "questions": questions,
     }
 
+    if category is not None:
+        data["category_id"] = category.pk
+
+    return data
+
 
 def _serialise_category(category: ChecklistCategory) -> dict[str, Any]:
     """Serialise checklist category with nested sections."""
 
-    sections = [_serialise_section(section) for section in category.sections.all()]
+    sections = [
+        _serialise_section(section, category=category)
+        for section in category.sections.all()
+    ]
     return {
         "id": category.pk,
         "code": category.code,
@@ -166,4 +214,38 @@ def build_checklist_structure() -> dict[str, Any]:
         "total_questions": total_questions,
         "generated_at": timezone.now().isoformat(),
     }
+
+
+def build_audit_filter_snapshot(user: object | None = None) -> dict[str, Any]:
+    """Return available audit filter options tailored for the given user."""
+
+    status_filters = [("", _("Все статусы"))] + list(Audit.Status.choices)
+    period_filters = [
+        ("", _("За всё время")),
+        ("7", _("За последние 7 дней")),
+        ("30", _("За последние 30 дней")),
+        ("90", _("За последние 90 дней")),
+    ]
+
+    filters: dict[str, list[dict[str, str]]] = {
+        "status": [
+            {"value": value, "label": str(label)} for value, label in status_filters
+        ],
+        "period": [
+            {"value": value, "label": str(label)} for value, label in period_filters
+        ],
+    }
+
+    if user is not None and is_admin(user):
+        review_filters = [
+            ("", _("Все аудиты")),
+            ("pending", _("Ожидают проверки")),
+            ("active", _("В работе")),
+            ("reviewed", _("Просмотренные")),
+        ]
+        filters["review"] = [
+            {"value": value, "label": str(label)} for value, label in review_filters
+        ]
+
+    return filters
 
