@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from audits.models import AttachmentLimits
@@ -107,3 +107,24 @@ class OfflineChecklistViewTests(TestCase):
         serialized_text_question = first_section["questions"][1]
         self.assertEqual(serialized_text_question["type"], ChecklistQuestion.QuestionType.TEXT)
         self.assertTrue(serialized_text_question["requires_comment"])
+
+    @override_settings(
+        AUDIT_ATTACHMENT_LIMITS={
+            "max_size_bytes": 4 * 1024 * 1024,
+            "max_per_response": 5,
+            "max_per_audit": 50,
+        }
+    )
+    def test_attachment_limits_follow_settings(self) -> None:
+        self.client.force_login(self.auditor)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+        limits = response.context["attachment_limits"]
+        self.assertEqual(limits.max_size_bytes, 4 * 1024 * 1024)
+        self.assertEqual(limits.max_per_response, 5)
+        self.assertEqual(limits.max_per_audit, 50)
+        self.assertEqual(limits.max_size_label, "4")
+
+        max_size_mb = response.context["max_attachment_size_mb"]
+        self.assertAlmostEqual(max_size_mb, limits.max_size_mb)

@@ -210,6 +210,7 @@ class AuditAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
             "overall_summary": overall_summary,
             "recent_audits": list(self._get_recent_audits(queryset)),
             "status_breakdown": status_breakdown,
+            "offline_summary": self._build_offline_dashboard(),
         }
 
         context.setdefault("audit_dashboard", dashboard)
@@ -252,6 +253,35 @@ class AuditAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
             .order_by("-created_at")
             [:5]
         )
+
+    def _build_offline_dashboard(self) -> dict[str, Any]:
+        now = timezone.now()
+        last_24_hours = now - timedelta(hours=24)
+        last_week = now - timedelta(days=7)
+        pending_stale_threshold = now - timedelta(hours=1)
+
+        batches = models.OfflineSyncBatch.objects.all()
+        applied_qs = batches.filter(status=models.OfflineSyncBatch.Status.APPLIED)
+        pending_qs = batches.filter(status=models.OfflineSyncBatch.Status.PENDING)
+        error_qs = batches.filter(status=models.OfflineSyncBatch.Status.ERROR)
+
+        last_error = (
+            error_qs.order_by("-created_at")
+            .values("id", "device_id", "created_at")
+            .first()
+        )
+
+        return {
+            "total": batches.count(),
+            "applied": applied_qs.count(),
+            "pending": pending_qs.count(),
+            "pending_stale": pending_qs.filter(created_at__lt=pending_stale_threshold).count(),
+            "applied_last_7_days": applied_qs.filter(created_at__gte=last_week).count(),
+            "errors": error_qs.count(),
+            "errors_last_24h": error_qs.filter(created_at__gte=last_24_hours).count(),
+            "errors_last_7_days": error_qs.filter(created_at__gte=last_week).count(),
+            "last_error": last_error,
+        }
 
     # --- change form helpers -------------------------------------------------
 

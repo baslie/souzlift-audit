@@ -608,14 +608,13 @@ class OfflineChecklistView(RoleRequiredMixin, TemplateView):
         client_id = self.request.GET.get("client_id", "").strip()
         checklist = build_checklist_structure()
         limits = AttachmentLimits()
-        max_size_mb = limits.max_size_bytes / (1024 * 1024)
 
         context.update(
             {
                 "client_id": client_id,
                 "checklist": checklist,
                 "attachment_limits": limits,
-                "max_attachment_size_mb": max_size_mb,
+                "max_attachment_size_mb": limits.max_size_mb,
                 "return_url": reverse("audits:audit-list"),
             }
         )

@@ -10,6 +10,7 @@ from audits.models import (
     AuditLogEntry,
     AuditResponse,
     AuditSignature,
+    OfflineSyncBatch,
 )
 from catalog.models import (
     Building,
@@ -196,6 +197,24 @@ class AuditLogEntryTests(ProtectedMediaTestCase):
         self.assertEqual(delete_entry.user, self.admin)
         self.assertEqual(delete_entry.payload.get("signed_by"), "Главный инженер")
 
+    def test_mark_reviewed_is_logged(self) -> None:
+        audit = self._create_audit()
+        audit.start(actor=self.auditor)
+        audit.submit(actor=self.auditor)
+
+        audit.mark_reviewed(actor=self.admin)
+
+        entry = AuditLogEntry.objects.filter(
+            action=AuditLogEntry.Action.AUDIT_REVIEWED,
+            entity_id=str(audit.pk),
+        ).first()
+
+        self.assertIsNotNone(entry)
+        assert entry is not None
+        self.assertEqual(entry.user, self.admin)
+        self.assertEqual(entry.payload.get("status"), Audit.Status.REVIEWED)
+        self.assertIn("reviewed_at", entry.payload)
+
 
 class AuditLogAttachmentTests(ProtectedMediaTestCase):
     """Ensure attachments produce log entries for lifecycle events."""
@@ -273,3 +292,70 @@ class AuditLogAttachmentTests(ProtectedMediaTestCase):
         assert delete_entry is not None
         self.assertEqual(delete_entry.user, self.admin)
         self.assertEqual(delete_entry.payload.get("response_id"), response.pk)
+
+
+class OfflineSyncBatchLogTests(ProtectedMediaTestCase):
+    """Ensure offline synchronisation batches produce audit trail records."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        UserModel = get_user_model()
+        self.admin = UserModel.objects.create_user(username="admin3", password="Pass12345")
+        self.admin.profile.role = UserProfile.Roles.ADMIN
+        self.admin.profile.save(update_fields=["role"])
+        self.admin.profile.mark_password_changed()
+
+        self.auditor = UserModel.objects.create_user(username="auditor3", password="Pass12345")
+        self.auditor.profile.mark_password_changed()
+
+    def test_offline_batch_lifecycle_logged(self) -> None:
+        batch = OfflineSyncBatch.objects.create(
+            user=self.auditor,
+            device_id="device-001",
+            payload={"kind": "data", "note": "create"},
+            payload_hash="hash-1",
+        )
+
+        creation_entry = AuditLogEntry.objects.filter(
+            action=AuditLogEntry.Action.OFFLINE_BATCH_CREATED,
+            entity_id=str(batch.pk),
+        ).first()
+        self.assertIsNotNone(creation_entry)
+        assert creation_entry is not None
+        self.assertEqual(creation_entry.user, self.auditor)
+        self.assertEqual(creation_entry.payload.get("status"), OfflineSyncBatch.Status.PENDING)
+        self.assertEqual(creation_entry.payload.get("kind"), "data")
+
+        batch.mark_applied({"status": "ok"}, status=200)
+
+        applied_entry = AuditLogEntry.objects.filter(
+            action=AuditLogEntry.Action.OFFLINE_BATCH_APPLIED,
+            entity_id=str(batch.pk),
+        ).first()
+        self.assertIsNotNone(applied_entry)
+        assert applied_entry is not None
+        self.assertEqual(applied_entry.user, self.auditor)
+        self.assertEqual(applied_entry.payload.get("status"), OfflineSyncBatch.Status.APPLIED)
+        self.assertEqual(applied_entry.payload.get("response_status"), 200)
+        self.assertEqual(applied_entry.payload.get("kind"), "data")
+
+        error_batch = OfflineSyncBatch.objects.create(
+            user=self.auditor,
+            device_id="device-002",
+            payload={"kind": "attachment"},
+            payload_hash="hash-2",
+        )
+
+        error_batch.mark_error({"detail": "Checksum mismatch"}, status=400)
+
+        error_entry = AuditLogEntry.objects.filter(
+            action=AuditLogEntry.Action.OFFLINE_BATCH_ERROR,
+            entity_id=str(error_batch.pk),
+        ).first()
+        self.assertIsNotNone(error_entry)
+        assert error_entry is not None
+        self.assertEqual(error_entry.user, self.auditor)
+        self.assertEqual(error_entry.payload.get("status"), OfflineSyncBatch.Status.ERROR)
+        self.assertEqual(error_entry.payload.get("response_status"), 400)
+        self.assertEqual(error_entry.payload.get("kind"), "attachment")
+        self.assertEqual(error_entry.payload.get("details", {}).get("detail"), "Checksum mismatch")

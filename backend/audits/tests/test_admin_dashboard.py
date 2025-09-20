@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import UserProfile
-from audits.models import Audit
+from audits.models import Audit, OfflineSyncBatch
 from catalog.models import Building, Elevator
 
 
@@ -72,6 +72,24 @@ class AuditAdminDashboardTests(TestCase):
         self.reviewed.submit(actor=self.auditor)
         self.reviewed.mark_reviewed(actor=self.admin)
 
+        self.pending_batch = OfflineSyncBatch.objects.create(
+            user=self.auditor,
+            device_id="device-pending",
+            payload={"kind": "data"},
+        )
+        self.applied_batch = OfflineSyncBatch.objects.create(
+            user=self.auditor,
+            device_id="device-applied",
+            payload={"kind": "data"},
+        )
+        self.applied_batch.mark_applied({"status": "ok"}, status=200)
+        self.error_batch = OfflineSyncBatch.objects.create(
+            user=self.auditor,
+            device_id="device-error",
+            payload={"kind": "attachment"},
+        )
+        self.error_batch.mark_error({"detail": "Timeout"}, status=400)
+
     def test_dashboard_context_contains_expected_metrics(self) -> None:
         """The changelist view should provide aggregated metrics for display."""
 
@@ -105,6 +123,19 @@ class AuditAdminDashboardTests(TestCase):
         self.assertIsNotNone(overall_avg)
         assert overall_avg is not None
         self.assertAlmostEqual(float(overall_avg), 40.0)
+
+        offline = dashboard["offline_summary"]
+        self.assertEqual(offline["total"], 3)
+        self.assertEqual(offline["applied"], 1)
+        self.assertEqual(offline["pending"], 1)
+        self.assertEqual(offline["errors"], 1)
+        self.assertEqual(offline["errors_last_24h"], 1)
+        self.assertEqual(offline["errors_last_7_days"], 1)
+        self.assertEqual(offline["applied_last_7_days"], 1)
+        self.assertEqual(offline["pending_stale"], 0)
+        self.assertIsNotNone(offline["last_error"])
+        assert offline["last_error"] is not None
+        self.assertEqual(offline["last_error"]["device_id"], "device-error")
 
     def test_review_state_quick_filter(self) -> None:
         """Quick filters should reduce queryset according to review workflow."""

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from collections.abc import Mapping
 import json
@@ -17,9 +17,52 @@ from django.utils.translation import gettext_lazy as _
 from .storages import protected_media_storage
 from .tokens import build_attachment_token
 
-MAX_ATTACHMENT_SIZE_BYTES: Final[int] = 8 * 1024 * 1024
-MAX_ATTACHMENTS_PER_RESPONSE: Final[int] = 10
-MAX_ATTACHMENTS_PER_AUDIT: Final[int] = 100
+DEFAULT_ATTACHMENT_LIMITS: Final[dict[str, int]] = {
+    "max_size_bytes": 8 * 1024 * 1024,
+    "max_per_response": 10,
+    "max_per_audit": 100,
+}
+
+
+def _attachment_limits_config() -> dict[str, int]:
+    """Return attachment limits merged with optional overrides from settings."""
+
+    raw_config = getattr(settings, "AUDIT_ATTACHMENT_LIMITS", None) or {}
+    limits: dict[str, int] = DEFAULT_ATTACHMENT_LIMITS.copy()
+
+    for key in ("max_size_bytes", "max_per_response", "max_per_audit"):
+        value = raw_config.get(key)
+        if value is None:
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            limits[key] = parsed
+
+    return limits
+
+
+def _default_max_per_response() -> int:
+    return _attachment_limits_config()["max_per_response"]
+
+
+def _default_max_per_audit() -> int:
+    return _attachment_limits_config()["max_per_audit"]
+
+
+def _default_max_size_bytes() -> int:
+    return _attachment_limits_config()["max_size_bytes"]
+
+
+def _format_size_label(bytes_value: int) -> str:
+    """Format attachment size limit in megabytes for human readable messages."""
+
+    size_mb = bytes_value / (1024 * 1024)
+    if float(size_mb).is_integer():
+        return str(int(size_mb))
+    return f"{size_mb:.1f}".rstrip("0").rstrip(".")
 
 sync_logger = logging.getLogger("audits.offline_sync")
 
@@ -58,9 +101,21 @@ def _serialize_date(value: date | None) -> str | None:
 class AttachmentLimits:
     """Convenience container exposing limits to templates and services."""
 
-    max_per_response: int = MAX_ATTACHMENTS_PER_RESPONSE
-    max_per_audit: int = MAX_ATTACHMENTS_PER_AUDIT
-    max_size_bytes: int = MAX_ATTACHMENT_SIZE_BYTES
+    max_per_response: int = field(default_factory=_default_max_per_response)
+    max_per_audit: int = field(default_factory=_default_max_per_audit)
+    max_size_bytes: int = field(default_factory=_default_max_size_bytes)
+
+    @property
+    def max_size_mb(self) -> float:
+        """Return the limit converted to megabytes for calculations."""
+
+        return self.max_size_bytes / (1024 * 1024)
+
+    @property
+    def max_size_label(self) -> str:
+        """Return a short label (in MB) suitable for error messages."""
+
+        return _format_size_label(self.max_size_bytes)
 
 
 class Audit(models.Model):
@@ -340,13 +395,25 @@ class Audit(models.Model):
         """Отметить аудит как просмотренный администратором."""
 
         self.status = self.Status.REVIEWED
-        if actor is not None:
-            self._log_actor = actor
+        actor_model = actor if isinstance(actor, models.Model) else None
+        if actor_model is not None:
+            self._log_actor = actor_model
         if commit:
             if self.pk is None:
                 self.save()
             else:
                 self.save(update_fields=["status"])
+
+            if getattr(self, "_status_changed", False):
+                AuditLogEntry.objects.log_action(
+                    action=AuditLogEntry.Action.AUDIT_REVIEWED,
+                    entity=self,
+                    user=actor_model or getattr(self, "created_by", None),
+                    payload={
+                        "status": self.status,
+                        "reviewed_at": _serialize_datetime(self.updated_at),
+                    },
+                )
 
     def request_changes(self, *, actor: object | None = None, message: str) -> None:
         """Запросить у аудитора корректировки по отправленному аудиту."""
@@ -647,11 +714,14 @@ class AuditAttachment(models.Model):
 
         errors: dict[str, list[ValidationError]] = {}
 
+        limits = AttachmentLimits()
+
         if self.file and hasattr(self.file, "size"):
-            if self.file.size > MAX_ATTACHMENT_SIZE_BYTES:
+            if self.file.size > limits.max_size_bytes:
                 errors.setdefault("file", []).append(
                     ValidationError(
-                        _("Размер файла превышает ограничение в 8 МБ."),
+                        _("Размер файла превышает ограничение в %(limit)s МБ."),
+                        params={"limit": limits.max_size_label},
                     ),
                 )
 
@@ -660,11 +730,11 @@ class AuditAttachment(models.Model):
             if self.pk:
                 response_qs = response_qs.exclude(pk=self.pk)
             response_count = response_qs.count()
-            if response_count >= MAX_ATTACHMENTS_PER_RESPONSE:
+            if response_count >= limits.max_per_response:
                 errors.setdefault("response", []).append(
                     ValidationError(
                         _("Для одного вопроса доступно не более %(limit)d вложений."),
-                        params={"limit": MAX_ATTACHMENTS_PER_RESPONSE},
+                        params={"limit": limits.max_per_response},
                     ),
                 )
 
@@ -672,11 +742,11 @@ class AuditAttachment(models.Model):
             if self.pk:
                 audit_qs = audit_qs.exclude(pk=self.pk)
             audit_count = audit_qs.count()
-            if audit_count >= MAX_ATTACHMENTS_PER_AUDIT:
+            if audit_count >= limits.max_per_audit:
                 errors.setdefault("response__audit", []).append(
                     ValidationError(
                         _("Для одного аудита доступно не более %(limit)d вложений."),
-                        params={"limit": MAX_ATTACHMENTS_PER_AUDIT},
+                        params={"limit": limits.max_per_audit},
                     ),
                 )
 
@@ -922,6 +992,10 @@ class AuditLogEntry(models.Model):
         SIGNATURE_CREATED = "signature.created", _("Подпись добавлена")
         SIGNATURE_UPDATED = "signature.updated", _("Подпись обновлена")
         SIGNATURE_DELETED = "signature.deleted", _("Подпись удалена")
+        AUDIT_REVIEWED = "audit.reviewed", _("Аудит просмотрен")
+        OFFLINE_BATCH_CREATED = "offline.batch_created", _("Офлайн-пакет принят")
+        OFFLINE_BATCH_APPLIED = "offline.batch_applied", _("Офлайн-пакет применён")
+        OFFLINE_BATCH_ERROR = "offline.batch_error", _("Ошибка офлайн-пакета")
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -1063,12 +1137,28 @@ class OfflineSyncBatch(models.Model):
 
         self.status = self.Status.APPLIED
         self.response_status = status
-        update_fields = ["status", "response_status"]
         if response is not None:
             self.response_payload = dict(response)
+        if not commit:
+            return
+
+        update_fields = ["status", "response_status"]
+        if response is not None:
             update_fields.append("response_payload")
-        if commit:
-            self.save(update_fields=update_fields)
+
+        self.save(update_fields=update_fields)
+
+        log_actor = _consume_log_actor(self) or self.user
+        payload_extra: dict[str, Any] = {"response_status": status}
+        if response is not None:
+            payload_extra["response"] = dict(response)
+
+        AuditLogEntry.objects.log_action(
+            action=AuditLogEntry.Action.OFFLINE_BATCH_APPLIED,
+            entity=self,
+            user=log_actor,
+            payload=self._build_log_payload(payload_extra),
+        )
 
     def mark_error(
         self,
@@ -1092,6 +1182,20 @@ class OfflineSyncBatch(models.Model):
                     "response_status",
                 ]
             )
+
+            log_actor = _consume_log_actor(self) or self.user
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.OFFLINE_BATCH_ERROR,
+                entity=self,
+                user=log_actor,
+                payload=self._build_log_payload(
+                    {
+                        "response_status": status,
+                        "details": dict(details or {}),
+                    }
+                ),
+            )
+
             from .emails import notify_offline_sync_error
 
             notify_offline_sync_error(self)
@@ -1102,6 +1206,19 @@ class OfflineSyncBatch(models.Model):
         status_label = self.get_status_display()
         identifier = self.pk if self.pk is not None else "pending"
         return f"Batch #{identifier} ({status_label})"
+
+    def save(self, *args: object, **kwargs: object) -> None:  # type: ignore[override]
+        creating = self.pk is None
+        super().save(*args, **kwargs)
+
+        if creating:
+            log_actor = _consume_log_actor(self) or self.user
+            AuditLogEntry.objects.log_action(
+                action=AuditLogEntry.Action.OFFLINE_BATCH_CREATED,
+                entity=self,
+                user=log_actor,
+                payload=self._build_log_payload(),
+            )
 
     def _log_offline_sync_error(self, status: int) -> None:
         """Log structured information about offline sync errors."""
@@ -1133,4 +1250,23 @@ class OfflineSyncBatch(models.Model):
             self.payload_hash or "-",
             details_serialized,
         )
+
+    def _payload_kind(self) -> str | None:
+        if isinstance(self.payload, Mapping):
+            kind = self.payload.get("kind")
+            return str(kind) if kind is not None else None
+        return None
+
+    def _build_log_payload(self, extra: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "status": self.status,
+            "device_id": self.device_id,
+            "payload_hash": self.payload_hash or "",
+        }
+        kind = self._payload_kind()
+        if kind:
+            payload["kind"] = kind
+        if extra:
+            payload.update(dict(extra))
+        return payload
 
