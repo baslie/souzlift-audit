@@ -27,7 +27,10 @@
                 {% if primary_navigation.show_admin_link %}
                   <a href="{% url 'admin:index' %}" class="app-header__link">Django Admin</a>
                 {% endif %}
-                <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
+                <form method="post" action="{% url 'accounts:logout' %}" class="app-header__logout-form">
+                  {% csrf_token %}
+                  <button type="submit" class="app-header__link">Выйти</button>
+                </form>
               {% else %}
                 <a href="{% url 'accounts:login' %}" class="app-header__link">Вход</a>
               {% endif %}
