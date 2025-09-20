@@ -5,11 +5,18 @@ from django.core import mail
 from django.test import Client
 from django.urls import reverse
 
-from audits.models import Audit
+from audits.models import AttachmentLimitConfiguration, AttachmentLimits, Audit
 from audits.services import build_checklist_structure
-from catalog.models import Building, ChecklistCategory, ChecklistQuestion, Elevator, ReviewStatus
+from catalog.models import (
+    Building,
+    ChecklistCategory,
+    ChecklistQuestion,
+    Elevator,
+    ObjectInfoField,
+    ReviewStatus,
+)
 
-from .factories import AdminUserFactory, AuditorUserFactory
+from .factories import AdminUserFactory, AuditorUserFactory, ObjectInfoFieldFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -185,3 +192,104 @@ def test_admin_moderates_audit_and_restricts_access() -> None:
 
     detail_response = client.get(reverse("audits:audit-detail", args=[audit.pk]))
     assert detail_response.status_code == 403
+
+
+def test_admin_manages_settings_section() -> None:
+    """End-to-end scenario for the administrator settings section."""
+
+    admin = AdminUserFactory()
+    auditor = AuditorUserFactory()
+    admin.profile.mark_password_changed()
+    auditor.profile.mark_password_changed()
+    client = Client()
+
+    settings_url = reverse("catalog:object-field-list")
+
+    client.force_login(auditor)
+    forbidden = client.get(settings_url)
+    assert forbidden.status_code == 403
+    client.logout()
+
+    client.force_login(admin)
+
+    overview = client.get(settings_url)
+    assert overview.status_code == 200
+    assert "Лимиты вложений" in overview.content.decode()
+
+    create_response = client.post(
+        reverse("catalog:object-field-create"),
+        data={
+            "code": "passport",
+            "label": "Паспорт объекта",
+            "field_type": ObjectInfoField.FieldType.TEXT,
+            "is_required": "on",
+            "order": 0,
+            "choices": "",
+        },
+    )
+    assert create_response.status_code == 302
+
+    field = ObjectInfoField.objects.get(code="passport")
+    assert field.is_required is True
+    assert field.field_type == ObjectInfoField.FieldType.TEXT
+
+    update_response = client.post(
+        reverse("catalog:object-field-update", args=[field.pk]),
+        data={
+            "code": "passport",
+            "label": "Паспорт объекта",
+            "field_type": ObjectInfoField.FieldType.CHOICE,
+            "is_required": "",
+            "order": 1,
+            "choices": "Есть\nНет\n",
+        },
+    )
+    assert update_response.status_code == 302
+
+    field.refresh_from_db()
+    assert field.field_type == ObjectInfoField.FieldType.CHOICE
+    assert field.choices == "Есть\nНет"
+
+    other_field = ObjectInfoFieldFactory(order=5)
+    move_response = client.post(
+        reverse("catalog:object-field-move", args=[other_field.pk]),
+        data={"direction": "up", "next": settings_url},
+    )
+    assert move_response.status_code == 302
+
+    field.refresh_from_db()
+    other_field.refresh_from_db()
+    assert other_field.order < field.order
+
+    delete_response = client.post(
+        reverse("catalog:object-field-delete", args=[field.pk]),
+        data={"next": settings_url},
+    )
+    assert delete_response.status_code == 302
+    assert not ObjectInfoField.objects.filter(pk=field.pk).exists()
+    other_field.refresh_from_db()
+    assert other_field.order == 0
+
+    AttachmentLimitConfiguration.objects.all().delete()
+    limits_response = client.post(
+        settings_url,
+        data={
+            "form": "attachments",
+            "max_size_mb": 12,
+            "max_per_response": 4,
+            "max_per_audit": 40,
+        },
+    )
+    assert limits_response.status_code == 302
+
+    config = AttachmentLimitConfiguration.objects.get(
+        key=AttachmentLimitConfiguration.SINGLETON_KEY
+    )
+    assert config.max_size_mb == 12
+    assert config.max_per_response == 4
+    assert config.max_per_audit == 40
+
+    limits = AttachmentLimits()
+    assert limits.max_per_response == 4
+    assert limits.max_per_audit == 40
+    assert limits.max_size_bytes == 12 * 1024 * 1024

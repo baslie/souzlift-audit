@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from django import forms
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from accounts.forms import TailwindFormMixin
@@ -14,6 +15,7 @@ from .models import (
     ChecklistQuestion,
     ChecklistSection,
     Elevator,
+    ObjectInfoField,
     ScoreOption,
 )
 
@@ -209,4 +211,70 @@ class ScoreOptionForm(TailwindFormMixin, forms.ModelForm):
         )
         self.fields["score"].widget.attrs.setdefault("min", 0)
         self.fields["order"].widget.attrs.setdefault("min", 0)
+
+
+class ObjectInfoFieldForm(TailwindFormMixin, forms.ModelForm):
+    """Форма управления полями информационной карточки объекта."""
+
+    max_choices_hint = _(
+        "Указывайте по одному значению в строке. Пустые строки будут проигнорированы."
+    )
+
+    class Meta:
+        model = ObjectInfoField
+        fields = ["code", "label", "field_type", "is_required", "order", "choices"]
+        labels = {
+            "code": _("Код"),
+            "label": _("Название"),
+            "field_type": _("Тип поля"),
+            "is_required": _("Обязательное"),
+            "order": _("Порядок"),
+            "choices": _("Варианты значений"),
+        }
+        help_texts = {
+            "code": _(
+                "Используется для хранения значения в JSON. Изменение влияет на офлайн-снапшоты"
+                " и новые аудиты."
+            ),
+            "order": _(
+                "Чем меньше значение, тем выше поле отображается в информационной карточке."
+            ),
+            "choices": _(
+                "Перечислите доступные варианты для полей с типом «Выбор из списка»."
+            ),
+        }
+        widgets = {
+            "choices": forms.Textarea(attrs={"rows": 6}),
+        }
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["order"].widget.attrs.setdefault("min", 0)
+        self.fields["choices"].help_text = format_html(
+            "{} {}",
+            self.fields["choices"].help_text or "",
+            self.max_choices_hint,
+        )
+
+    def clean_choices(self) -> str:
+        data = self.cleaned_data.get("choices", "")
+        field_type = self.cleaned_data.get("field_type") or (
+            self.instance.field_type if self.instance and self.instance.pk else None
+        )
+        if field_type == ObjectInfoField.FieldType.CHOICE:
+            lines = [value.strip() for value in data.splitlines() if value.strip()]
+            if not lines:
+                raise forms.ValidationError(
+                    _("Добавьте хотя бы один вариант для поля выбора."),
+                )
+            return "\n".join(lines)
+        return ""
+
+    def clean(self) -> dict[str, object]:
+        cleaned = super().clean()
+        field_type = cleaned.get("field_type")
+        if field_type != ObjectInfoField.FieldType.CHOICE:
+            cleaned["choices"] = ""
+        return cleaned
+
 

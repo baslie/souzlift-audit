@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title|default:"Удаление записи · Союзлифт Аудит" }}{% endblock %}
+{% block heading %}{{ form_heading|default:"Удаление записи" }}{% endblock %}
+{% block subheading %}
+  {% if form_subheading %}
+    <p class="text-sm text-ink-500">{{ form_subheading }}</p>
+  {% else %}
+    <p class="text-sm text-ink-500">Действие нельзя отменить.</p>
+  {% endif %}
+{% endblock %}
+{% block content %}
+  <form method="post">
+    {% csrf_token %}
+    {% for hidden in form.hidden_fields %}
+      {{ hidden }}
+    {% endfor %}
+    {{ form.non_field_errors }}
+    <p class="text-sm text-ink-600">Вы уверены, что хотите продолжить?</p>
+    <div class="mt-6 flex flex-wrap gap-3">
+      <button type="submit" class="btn btn--danger">{{ submit_label|default:"Удалить" }}</button>
+      <a href="{{ cancel_url|default:settings_overview_url }}" class="btn btn--secondary">Отмена</a>
+    </div>
+  </form>
+{% endblock %}
