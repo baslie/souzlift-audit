@@ -156,11 +156,21 @@ LOG_FILE=/var/log/souzlift/backup.log \
 
 ### 3.3. Контроль ресурсов
 
-- Раз в час выполняйте проверку свободного дискового пространства:
+- Для контроля свободного места используйте скрипт [`scripts/check_storage.sh`](../scripts/check_storage.sh). Он вычисляет процент заполнения диска для каталога проекта, сообщает суммарный объём медиа и возвращает код возврата `0/1/2` для состояний `OK/WARNING/CRITICAL`. Пример задания в `cron`:
   ```bash
-  */60 * * * * df -h /opt/souzlift >> /var/log/souzlift/disk_usage.log
+  */60 * * * * PROJECT_ROOT=/opt/souzlift \
+    /opt/souzlift/scripts/check_storage.sh >> /var/log/souzlift/disk_usage.log 2>&1
   ```
-- Еженедельно запускайте `python manage.py clearsessions` и отчёт о размере медиа (`du -sh backend/media`). Эти операции будут автоматизированы скриптами на этапе T9.3.
+- Для еженедельного обслуживания добавьте задания:
+  - `scripts/run_clearsessions.sh` — обёртка над `python manage.py clearsessions`, очищающая устаревшие записи сессий. Скрипт принимает переменные `PROJECT_ROOT`, `VENV_PATH`, `PYTHON_BIN` и наследует остальные аргументы Django-команды.
+  - `scripts/check_attachments.sh` — запускает management-команду `check_attachments_integrity`. По умолчанию команда лишь отчётно проверяет наличие файлов; при необходимости можно добавить флаги `--fix-sizes` и `--delete-orphans` для синхронизации поля `stored_size` и удаления осиротевших файлов. Для машинной обработки доступен формат `--json`.
+  Пример расписания:
+  ```bash
+  0 3 * * 1 PROJECT_ROOT=/opt/souzlift VENV_PATH=/opt/souzlift/.venv \
+    /opt/souzlift/scripts/run_clearsessions.sh >> /var/log/souzlift/maintenance.log 2>&1
+  30 3 * * 1 PROJECT_ROOT=/opt/souzlift VENV_PATH=/opt/souzlift/.venv \
+    /opt/souzlift/scripts/check_attachments.sh --json >> /var/log/souzlift/attachments.log 2>&1
+  ```
 
 ### 3.4. Поддержка пользователей
 
