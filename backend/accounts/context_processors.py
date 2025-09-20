@@ -52,6 +52,11 @@ _ACTIVE_VIEW_MAP: dict[str, str] = {
     "catalog:checklist-option-update": "checklist",
     "catalog:checklist-option-delete": "checklist",
     "catalog:checklist-option-move": "checklist",
+    "catalog:object-field-list": "settings",
+    "catalog:object-field-create": "settings",
+    "catalog:object-field-update": "settings",
+    "catalog:object-field-delete": "settings",
+    "catalog:object-field-move": "settings",
 }
 
 
@@ -62,6 +67,7 @@ def _build_admin_navigation() -> Iterable[NavigationItem]:
         NavigationItem("buildings", "Здания", reverse("catalog:building-list")),
         NavigationItem("elevators", "Лифты", reverse("catalog:elevator-list")),
         NavigationItem("checklist", "Чек-лист", reverse("catalog:checklist-overview")),
+        NavigationItem("settings", "Настройки", reverse("catalog:object-field-list")),
     )
 
 

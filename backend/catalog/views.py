@@ -19,6 +19,8 @@ from django.views.generic import CreateView, DeleteView, ListView, TemplateView,
 from accounts.models import UserProfile
 from accounts.permissions import AdminRequiredMixin, RoleRequiredMixin
 
+from audits.forms import AttachmentLimitForm
+from audits.models import AttachmentLimitConfiguration, AttachmentLimits
 from audits.services import build_checklist_structure
 
 from .forms import (
@@ -27,6 +29,7 @@ from .forms import (
     ChecklistQuestionForm,
     ChecklistSectionForm,
     ElevatorForm,
+    ObjectInfoFieldForm,
     ScoreOptionForm,
 )
 from .models import (
@@ -35,6 +38,7 @@ from .models import (
     ChecklistQuestion,
     ChecklistSection,
     Elevator,
+    ObjectInfoField,
     ReviewStatus,
     ScoreOption,
 )
@@ -835,4 +839,240 @@ class ScoreOptionReorderView(ChecklistReorderView):
 
     def get_siblings(self, instance: ScoreOption) -> QuerySet:
         return ScoreOption.objects.filter(question=instance.question)
+
+
+class AdminSettingsMixin(AdminRequiredMixin):
+    """Общие настройки для раздела «Настройки» кабинета администратора."""
+
+    success_url = reverse_lazy("catalog:object-field-list")
+
+    def get_return_url(self) -> str:
+        next_url = self.request.POST.get("next") or self.request.GET.get("next")
+        if next_url:
+            return str(next_url)
+        return str(self.success_url)
+
+    def get_success_url(self) -> str:  # type: ignore[override]
+        return self.get_return_url()
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        context.setdefault("return_url", self.get_return_url())
+        context.setdefault("settings_overview_url", reverse("catalog:object-field-list"))
+        return context
+
+
+class ObjectInfoFieldListView(AdminSettingsMixin, TemplateView):
+    """Сводный список полей информационной карточки и лимитов вложений."""
+
+    template_name = "catalog/settings/object_info_field_list.html"
+
+    def _get_attachment_initial(self) -> dict[str, int]:
+        config = AttachmentLimitConfiguration.objects.filter(
+            key=AttachmentLimitConfiguration.SINGLETON_KEY
+        ).first()
+        if config:
+            return {
+                "max_size_mb": config.max_size_mb,
+                "max_per_response": config.max_per_response,
+                "max_per_audit": config.max_per_audit,
+            }
+        limits = AttachmentLimits()
+        max_size_mb = (limits.max_size_bytes + (1024 * 1024) - 1) // (1024 * 1024)
+        return {
+            "max_size_mb": max(1, int(max_size_mb)),
+            "max_per_response": limits.max_per_response,
+            "max_per_audit": limits.max_per_audit,
+        }
+
+    def get_attachment_form(self) -> AttachmentLimitForm:
+        if self.request.method == "POST" and self.request.POST.get("form") == "attachments":
+            return AttachmentLimitForm(self.request.POST)
+        return AttachmentLimitForm(initial=self._get_attachment_initial())
+
+    def get_attachment_configuration(self) -> AttachmentLimitConfiguration | None:
+        return AttachmentLimitConfiguration.objects.filter(
+            key=AttachmentLimitConfiguration.SINGLETON_KEY
+        ).first()
+
+    def post(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:
+        if request.POST.get("form") != "attachments":
+            return self.get(request, *args, **kwargs)
+
+        form = AttachmentLimitForm(request.POST)
+        if form.is_valid():
+            cleaned = form.cleaned_data
+            AttachmentLimitConfiguration.update_limits(
+                max_size_mb=int(cleaned["max_size_mb"]),
+                max_per_response=int(cleaned["max_per_response"]),
+                max_per_audit=int(cleaned["max_per_audit"]),
+            )
+            messages.success(request, _("Лимиты вложений обновлены."))
+            return redirect(self.get_return_url())
+
+        context = self.get_context_data(attachment_form=form)
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        fields = ObjectInfoField.objects.all().order_by("order", "label")
+        context.setdefault("fields", fields)
+        context.setdefault("field_count", fields.count())
+        context.setdefault("attachment_form", kwargs.get("attachment_form") or self.get_attachment_form())
+        context.setdefault("attachment_limits", AttachmentLimits())
+        context.setdefault("attachment_configuration", self.get_attachment_configuration())
+        context.setdefault("object_fields_have_choices", fields.filter(field_type=ObjectInfoField.FieldType.CHOICE).exists())
+        return context
+
+
+class SettingsFormViewMixin(AdminSettingsMixin):
+    """Базовый шаблон для форм раздела «Настройки»."""
+
+    template_name = "catalog/settings/object_info_field_form.html"
+    page_title_create: str = ""
+    page_title_update: str = ""
+    heading_create: str = ""
+    heading_update: str = ""
+    subheading_create: str = ""
+    subheading_update: str = ""
+    submit_label_create: str = _("Сохранить")
+    submit_label_update: str = _("Сохранить изменения")
+
+    def _is_update(self) -> bool:
+        obj = getattr(self, "object", None)
+        return bool(obj and getattr(obj, "pk", None))
+
+    def get_page_title(self) -> str:
+        if self._is_update() and self.page_title_update:
+            return self.page_title_update
+        return self.page_title_create
+
+    def get_form_heading(self) -> str:
+        if self._is_update() and self.heading_update:
+            return self.heading_update
+        return self.heading_create
+
+    def get_form_subheading(self) -> str:
+        if self._is_update() and self.subheading_update:
+            return self.subheading_update
+        return self.subheading_create
+
+    def get_submit_label(self) -> str:
+        return self.submit_label_update if self._is_update() else self.submit_label_create
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        context.setdefault("page_title", self.get_page_title())
+        context.setdefault("form_heading", self.get_form_heading())
+        context.setdefault("form_subheading", self.get_form_subheading())
+        context.setdefault("submit_label", self.get_submit_label())
+        context.setdefault("cancel_url", context.get("return_url", self.get_return_url()))
+        return context
+
+
+class SettingsDeleteView(AdminSettingsMixin, DeleteView):
+    """Общий шаблон удаления элементов раздела настроек."""
+
+    template_name = "catalog/settings/confirm_delete.html"
+    page_title: str = ""
+    heading: str = ""
+    subheading_template: str = ""
+    success_message: str = ""
+
+    def get_page_title(self) -> str:
+        return self.page_title
+
+    def get_heading(self) -> str:
+        return self.heading
+
+    def get_subheading(self) -> str:
+        if self.subheading_template and getattr(self, "object", None):
+            return self.subheading_template.format(name=self.object)
+        return ""
+
+    def delete(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:
+        self.object = self.get_object()
+        response = super().delete(request, *args, **kwargs)
+        if self.success_message:
+            messages.success(request, self.success_message)
+        return response
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        context.setdefault("page_title", self.get_page_title())
+        context.setdefault("form_heading", self.get_heading())
+        context.setdefault("form_subheading", self.get_subheading())
+        context.setdefault("submit_label", _("Удалить"))
+        context.setdefault("cancel_url", context.get("return_url", self.get_return_url()))
+        return context
+
+
+class ObjectInfoFieldCreateView(SettingsFormViewMixin, CreateView):
+    """Создание нового поля информационной карточки."""
+
+    model = ObjectInfoField
+    form_class = ObjectInfoFieldForm
+    page_title_create = _("Новое поле информационной карточки · Союзлифт Аудит")
+    heading_create = _("Новое поле информационной карточки")
+    subheading_create = _(
+        "Поле появится в карточке объекта сразу после сохранения."
+    )
+
+    def form_valid(self, form: ObjectInfoFieldForm):  # type: ignore[override]
+        _assign_order_if_missing(form.instance, ObjectInfoField.objects.all())
+        messages.success(self.request, _("Поле добавлено."))
+        return super().form_valid(form)
+
+
+class ObjectInfoFieldUpdateView(SettingsFormViewMixin, UpdateView):
+    """Редактирование существующего поля."""
+
+    model = ObjectInfoField
+    form_class = ObjectInfoFieldForm
+    page_title_update = _("Редактирование поля информационной карточки · Союзлифт Аудит")
+    heading_update = _("Редактирование поля информационной карточки")
+    subheading_update = _(
+        "Обновлённые параметры будут использоваться в новых аудитах и офлайн-снапшотах."
+    )
+
+    def form_valid(self, form: ObjectInfoFieldForm):  # type: ignore[override]
+        messages.success(self.request, _("Поле обновлено."))
+        return super().form_valid(form)
+
+
+class ObjectInfoFieldDeleteView(SettingsDeleteView):
+    """Удаление поля информационной карточки."""
+
+    model = ObjectInfoField
+    page_title = _("Удаление поля информационной карточки · Союзлифт Аудит")
+    heading = _("Удалить поле информационной карточки")
+    subheading_template = _(
+        "Поле «{name}» будет удалено. Убедитесь, что офлайн-формы обновлены после изменения."
+    )
+    success_message = _("Поле удалено.")
+
+    def delete(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:  # type: ignore[override]
+        response = super().delete(request, *args, **kwargs)
+        _normalize_order(ObjectInfoField.objects.all())
+        return response
+
+
+class ObjectInfoFieldReorderView(AdminSettingsMixin, View):
+    """Перемещение поля вверх или вниз в списке."""
+
+    http_method_names = ["post"]
+
+    def post(self, request: HttpRequest, pk: int, *args: object, **kwargs: object) -> HttpResponse:
+        instance = get_object_or_404(ObjectInfoField, pk=pk)
+        direction = request.POST.get("direction", "").lower()
+        if direction not in {"up", "down"}:
+            messages.error(request, _("Неизвестное направление сортировки."))
+            return redirect(self.get_return_url())
+
+        moved = _move_in_order(instance, ObjectInfoField.objects.all(), direction)
+        if moved:
+            messages.success(request, _("Порядок полей обновлён."))
+        else:
+            messages.info(request, _("Поле уже находится на границе списка."))
+        return redirect(self.get_return_url())
 

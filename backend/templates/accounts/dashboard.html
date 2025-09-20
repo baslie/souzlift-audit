@@ -58,7 +58,7 @@
           аудитов. Для управления пользователями и аварийных операций используйте Django Admin только при наличии прав
           суперпользователя.
         </p>
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <a
             href="{% url 'audits:audit-list' %}"
             class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-100"
@@ -90,6 +90,14 @@
             <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Конструктор</span>
             <span class="text-lg font-semibold">Чек-лист</span>
             <span class="text-xs text-ink-500">Управляйте категориями, секциями и вариантами баллов — изменения сразу становятся доступными аудиторам.</span>
+          </a>
+          <a
+            href="{% url 'catalog:object-field-list' %}"
+            class="flex flex-col gap-2 rounded-2xl border border-border bg-surface-elevated p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-surface-subtle"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wide text-ink-500">Настройки</span>
+            <span class="text-lg font-semibold">Информационная карточка</span>
+            <span class="text-xs text-ink-500">Управляйте дополнительными полями объектов и лимитами вложений для аудитов.</span>
           </a>
         </div>
         <div class="rounded-2xl border border-border-subtle bg-surface-subtle p-4 text-xs text-ink-600">
