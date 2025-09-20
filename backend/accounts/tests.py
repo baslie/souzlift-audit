@@ -117,6 +117,43 @@ class AuthenticationFlowTests(TestCase):
         self.assertIsNone(profile.password_changed_at)
 
 
+class LogoutIntegrationTests(TestCase):
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+        self.username = "operator"
+        self.password = "SecurePass123!"
+        self.user = self.UserModel.objects.create_user(
+            username=self.username,
+            password=self.password,
+        )
+        self.user.profile.mark_password_changed()
+
+    def test_post_logout_ends_session_and_redirects_to_login(self) -> None:
+        login_response = self.client.post(
+            reverse("accounts:login"),
+            {"username": self.username, "password": self.password},
+        )
+        self.assertRedirects(
+            login_response,
+            reverse("accounts:dashboard"),
+            fetch_redirect_response=False,
+        )
+
+        response = self.client.post(reverse("accounts:logout"))
+        self.assertRedirects(
+            response,
+            reverse("accounts:login"),
+            fetch_redirect_response=False,
+        )
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        dashboard_response = self.client.get(reverse("accounts:dashboard"))
+        self.assertRedirects(
+            dashboard_response,
+            f"{reverse('accounts:login')}?next={reverse('accounts:dashboard')}",
+        )
+
+
 class QuerysetRestrictionTests(TestCase):
     def setUp(self) -> None:
         self.UserModel = get_user_model()

@@ -137,6 +137,14 @@
     @apply text-sm font-medium text-brand-100 transition duration-200 hover:text-white focus-visible:text-white focus-visible:ring-white/80 focus-visible:ring-offset-brand-900;
   }
 
+  .app-header__logout-form {
+    @apply m-0;
+  }
+
+  button.app-header__link {
+    @apply appearance-none bg-transparent border-0 cursor-pointer p-0;
+  }
+
   .app-alert {
     @apply rounded-xl border px-4 py-3 text-sm shadow-soft;
   }
