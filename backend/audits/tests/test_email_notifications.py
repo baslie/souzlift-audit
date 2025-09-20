@@ -60,6 +60,7 @@ class AuditEmailNotificationsTests(TestCase):
         message = mail.outbox[0]
         self.assertIn("аудит просмотрен", message.subject.lower())
         self.assertEqual(message.recipients(), ["auditor@example.com"])
+        self.assertIn("Администратор: admin", message.body)
 
     def test_auditor_notified_when_changes_requested(self) -> None:
         self.audit.start(actor=self.auditor)

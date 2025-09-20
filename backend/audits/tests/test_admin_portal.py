@@ -143,6 +143,7 @@ class AdminAuditPortalTests(TestCase):
         self.assertEqual(self.audit_submitted.status, Audit.Status.REVIEWED)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("просмотр", mail.outbox[0].subject.lower())
+        self.assertIn("Администратор: admin", mail.outbox[0].body)
 
     def test_request_changes_sends_email_and_logs(self) -> None:
         """Администратор может запросить правки и уведомить автора."""
