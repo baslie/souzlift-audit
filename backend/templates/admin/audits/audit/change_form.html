@@ -1,0 +1,453 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .audit-meta-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            margin-top: 1rem;
+        }
+        .audit-meta-card,
+        .audit-summary-card {
+            background: #ffffff;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            padding: 0.85rem 1rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+        }
+        .audit-meta-card .label,
+        .audit-summary-card .label,
+        .audit-allowed-fields .label {
+            display: block;
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+        .audit-meta-card strong {
+            display: block;
+            font-size: 1.25rem;
+            margin-top: 0.35rem;
+            color: #1f2937;
+        }
+        .audit-meta-card .subtext {
+            display: block;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        .audit-summary-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            margin-top: 1rem;
+        }
+        .audit-summary-card strong {
+            display: block;
+            font-size: 1.5rem;
+            color: #1d4ed8;
+            margin-top: 0.35rem;
+        }
+        .audit-summary-card .subtext {
+            display: block;
+            margin-top: 0.35rem;
+            font-size: 0.8rem;
+            color: #4b5563;
+        }
+        .audit-dates-list {
+            margin: 1rem 0 0;
+            padding-left: 1rem;
+            color: #4b5563;
+            font-size: 0.9rem;
+        }
+        .audit-dates-list li {
+            margin-bottom: 0.25rem;
+        }
+        .audit-allowed-fields {
+            margin: 0.75rem 0 0;
+            padding-left: 1rem;
+            color: #374151;
+        }
+        .audit-allowed-fields li {
+            margin-bottom: 0.25rem;
+        }
+        .audit-object-info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.75rem;
+        }
+        .audit-object-info-table th,
+        .audit-object-info-table td {
+            border: 1px solid #e5e7eb;
+            padding: 0.55rem 0.75rem;
+            vertical-align: top;
+        }
+        .audit-object-info-table th {
+            width: 35%;
+            font-weight: 600;
+            background: #f8fafc;
+        }
+        .audit-object-info-table td.value pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        .audit-object-info-table td.value .empty,
+        .audit-question-empty {
+            color: #9ca3af;
+            font-style: italic;
+        }
+        .audit-object-info-table tr.is-extra th {
+            background: #f1f5f9;
+        }
+        .audit-object-info-table tr.is-empty td.value {
+            color: #9ca3af;
+        }
+        .audit-question {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        .audit-question.is-flagged {
+            border-color: rgba(249, 115, 22, 0.45);
+            box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.15);
+        }
+        .audit-question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 1rem;
+        }
+        .audit-question-text {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .audit-question-value {
+            font-weight: 600;
+            color: #2563eb;
+            white-space: nowrap;
+        }
+        .audit-question-guideline {
+            margin: 0.5rem 0 0;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+        .audit-question-flags {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .audit-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.15rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .audit-badge-flagged {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+        }
+        .audit-badge-offline {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+        .question-comment {
+            margin-top: 0.75rem;
+        }
+        .question-comment .label {
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+        .question-comment p {
+            margin: 0.35rem 0 0;
+            white-space: pre-wrap;
+        }
+        .audit-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+        .audit-attachments figure {
+            margin: 0;
+            width: 140px;
+        }
+        .audit-attachments img {
+            width: 100%;
+            height: auto;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            background: #f8fafc;
+            display: block;
+        }
+        .audit-attachments figcaption {
+            margin-top: 0.35rem;
+            font-size: 0.8rem;
+            color: #4b5563;
+            word-break: break-word;
+        }
+        .audit-question-empty {
+            margin-top: 0.65rem;
+        }
+        .audit-question-note {
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        @media (prefers-color-scheme: dark) {
+            .audit-meta-card,
+            .audit-summary-card,
+            .audit-question {
+                background: #1f2937;
+                border-color: #374151;
+                box-shadow: none;
+            }
+            .audit-meta-card strong,
+            .audit-summary-card strong,
+            .audit-question-text {
+                color: #e5e7eb;
+            }
+            .audit-meta-card .subtext,
+            .audit-summary-card .subtext,
+            .audit-dates-list,
+            .audit-question-guideline,
+            .question-comment .label,
+            .question-comment p,
+            .audit-attachments figcaption,
+            .audit-question-note {
+                color: #d1d5db;
+            }
+            .audit-summary-card .label,
+            .audit-meta-card .label,
+            .audit-allowed-fields,
+            .audit-allowed-fields .label {
+                color: #9ca3af;
+            }
+            .audit-object-info-table th,
+            .audit-object-info-table td {
+                border-color: #374151;
+            }
+            .audit-object-info-table th {
+                background: #111827;
+                color: #e5e7eb;
+            }
+            .audit-object-info-table tr.is-extra th {
+                background: #1e293b;
+            }
+            .audit-object-info-table td.value .empty,
+            .audit-question-empty {
+                color: #9ca3af;
+            }
+            .audit-attachments img {
+                border-color: #4b5563;
+                background: #1f2937;
+            }
+            .audit-badge-flagged {
+                background: rgba(248, 113, 113, 0.2);
+                border-color: rgba(248, 113, 113, 0.4);
+                color: #fca5a5;
+            }
+            .audit-badge-offline {
+                background: rgba(96, 165, 250, 0.2);
+                border-color: rgba(96, 165, 250, 0.4);
+                color: #bfdbfe;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block after_field_sets %}
+    {{ block.super }}
+    {% if original %}
+        <div class="module">
+            <h2>{% trans "Информация об объекте" %}</h2>
+            <div class="audit-meta-grid">
+                <div class="audit-meta-card">
+                    <span class="label">{% trans "Здание" %}</span>
+                    <strong>{{ original.elevator.building }}</strong>
+                    <span class="subtext">{% trans "Статус модерации" %}: {{ original.elevator.building.get_review_status_display }}</span>
+                </div>
+                <div class="audit-meta-card">
+                    <span class="label">{% trans "Лифт" %}</span>
+                    <strong>{{ original.elevator.identifier }}</strong>
+                    <span class="subtext">{% trans "Статус" %}: {{ original.elevator.get_status_display }}</span>
+                </div>
+                <div class="audit-meta-card">
+                    <span class="label">{% trans "Статус аудита" %}</span>
+                    <strong>{{ original.get_status_display }}</strong>
+                    <span class="subtext">{% trans "Создан" %}: {{ original.created_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+                </div>
+                <div class="audit-meta-card">
+                    <span class="label">{% trans "Суммарный балл" %}</span>
+                    <strong>{{ original.total_score }}</strong>
+                    <span class="subtext">{% blocktrans with answered=audit_summary.answered_questions total=audit_summary.total_questions %}Ответов: {{ answered }} из {{ total }}{% endblocktrans %}</span>
+                </div>
+            </div>
+            <ul class="audit-dates-list">
+                <li>{% trans "Плановая дата" %}: {{ original.planned_date|default:"—" }}</li>
+                <li>{% trans "Начато" %}: {{ original.started_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</li>
+                <li>{% trans "Завершено" %}: {{ original.finished_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</li>
+            </ul>
+        </div>
+
+        <div class="module">
+            <h2>{% trans "Разрешённые правки" %}</h2>
+            <p class="audit-question-note">{% trans "Администратор может изменять только перечисленные поля." %}</p>
+            <ul class="audit-allowed-fields">
+                {% for field in audit_allowed_fields %}
+                    <li>{{ field.label }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        {% if audit_object_info %}
+            <div class="module">
+                <h2>{% trans "Информационная карта" %}</h2>
+                {% if not audit_object_info_has_values %}
+                    <p class="audit-question-empty">{% trans "Информационная карта не содержит данных." %}</p>
+                {% else %}
+                    <table class="audit-object-info-table">
+                        <tbody>
+                            {% for item in audit_object_info %}
+                                <tr class="{% if item.is_extra %}is-extra {% endif %}{% if item.is_empty %}is-empty{% endif %}">
+                                    <th scope="row">{{ item.label }}</th>
+                                    <td class="value">
+                                        {% if item.value %}
+                                            {% if item.is_multiline %}
+                                                <pre>{{ item.value }}</pre>
+                                            {% else %}
+                                                {{ item.value }}
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="empty">&mdash;</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <div class="module">
+            <h2>{% trans "Сводка по ответам" %}</h2>
+            <div class="audit-summary-grid">
+                <div class="audit-summary-card">
+                    <span class="label">{% trans "Заполнено" %}</span>
+                    <strong>{{ audit_summary.answered_questions }} / {{ audit_summary.total_questions }}</strong>
+                    <span class="subtext">{% trans "Количество ответов" %}</span>
+                </div>
+                <div class="audit-summary-card">
+                    <span class="label">{% trans "Без ответа" %}</span>
+                    <strong>{{ audit_summary.unanswered_questions }}</strong>
+                    <span class="subtext">{% trans "Вопросов без данных" %}</span>
+                </div>
+                <div class="audit-summary-card">
+                    <span class="label">{% trans "Комментарии" %}</span>
+                    <strong>{{ audit_summary.comments_total }}</strong>
+                    <span class="subtext">{% trans "Ответы с пояснениями" %}</span>
+                </div>
+                <div class="audit-summary-card">
+                    <span class="label">{% trans "Вложения" %}</span>
+                    <strong>{{ audit_summary.attachments_total }}</strong>
+                    <span class="subtext">{% trans "Фотографии и файлы" %}</span>
+                </div>
+                <div class="audit-summary-card">
+                    <span class="label">{% trans "Пометки" %}</span>
+                    <strong>{{ audit_summary.flagged_total }}</strong>
+                    <span class="subtext">{% trans "Ответы, требующие внимания" %}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="module">
+            <h2>{% trans "Чек-лист" %}</h2>
+            {% if audit_checklist %}
+                {% for category in audit_checklist %}
+                    <div class="audit-category">
+                        <h3>{{ category.name }}</h3>
+                        {% for section in category.sections %}
+                            <div class="audit-section">
+                                <h4>{{ section.title }}</h4>
+                                {% if section.description %}
+                                    <p class="audit-question-guideline">{{ section.description }}</p>
+                                {% endif %}
+                                {% for question in section.questions %}
+                                    <div class="audit-question{% if question.is_flagged %} is-flagged{% endif %}">
+                                        <div class="audit-question-header">
+                                            <div class="audit-question-text">{{ question.text }}</div>
+                                            <div class="audit-question-flags">
+                                                {% if question.is_flagged %}
+                                                    <span class="audit-badge audit-badge-flagged">{% trans "Пометка" %}</span>
+                                                {% endif %}
+                                                {% if question.is_offline %}
+                                                    <span class="audit-badge audit-badge-offline">{% trans "Офлайн" %}</span>
+                                                {% endif %}
+                                                <span class="audit-question-value">{{ question.value_display }}</span>
+                                            </div>
+                                        </div>
+                                        {% if question.guideline %}
+                                            <p class="audit-question-guideline">{{ question.guideline }}</p>
+                                        {% endif %}
+                                        {% if question.type == 'text' %}
+                                            {% if question.answer_display %}
+                                                <div class="question-comment">
+                                                    <span class="label">{% trans "Ответ" %}</span>
+                                                    <p>{{ question.answer_display|linebreaksbr }}</p>
+                                                </div>
+                                            {% else %}
+                                                <p class="audit-question-empty">{% trans "Ответ отсутствует." %}</p>
+                                            {% endif %}
+                                        {% else %}
+                                            {% if question.comment_display %}
+                                                <div class="question-comment">
+                                                    <span class="label">{% trans "Комментарий" %}</span>
+                                                    <p>{{ question.comment_display|linebreaksbr }}</p>
+                                                </div>
+                                            {% endif %}
+                                            {% if not question.has_response %}
+                                                <p class="audit-question-empty">{% trans "Ответ отсутствует." %}</p>
+                                            {% endif %}
+                                        {% endif %}
+                                        {% if question.attachments %}
+                                            <div class="audit-attachments">
+                                                {% for attachment in question.attachments %}
+                                                    <figure>
+                                                        <img src="{{ attachment.get_download_url }}" loading="lazy" alt="{{ attachment.caption|default:_('Вложение') }}">
+                                                        {% if attachment.caption %}
+                                                            <figcaption>{{ attachment.caption }}</figcaption>
+                                                        {% endif %}
+                                                    </figure>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="audit-question-empty">{% trans "Чек-лист ещё не настроен." %}</p>
+            {% endif %}
+        </div>
+    {% endif %}
+{% endblock %}
