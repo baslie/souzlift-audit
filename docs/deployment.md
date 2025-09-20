@@ -49,6 +49,25 @@
    ```bash
    sudo -u appuser DJANGO_ENV=prod /opt/souzlift/.venv/bin/python manage.py createsuperuser
    ```
+   Профиль создаваемого пользователя получает роль «Аудитор». Сразу после
+   создания назначьте ему роль администратора, иначе в основном интерфейсе будут
+   доступны только функции аудитора. Сделать это можно через панель
+   администратора (`/admin/accounts/userprofile/`) либо командой:
+
+   ```bash
+   sudo -u appuser DJANGO_ENV=prod /opt/souzlift/.venv/bin/python manage.py shell <<'PY'
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+user = User.objects.get(username="<ваш_логин>")
+profile = user.profile
+profile.role = profile.Roles.ADMIN
+profile.save(update_fields=["role"])
+print(f"Пользователь {user.username} переведён в роль администратора")
+PY
+   ```
+   Замените `<ваш_логин>` на имя созданного пользователя. После выполнения в
+   консоли появится подтверждение о смене роли.
 
 ## 3. Переменные окружения
 
