@@ -11,6 +11,7 @@ from .views import (
     AuditListView,
     AuditMarkReviewedView,
     AuditPrintView,
+    AuditRequestChangesView,
     OfflineChecklistView,
     OfflineObjectInfoView,
 )
@@ -30,10 +31,11 @@ urlpatterns = [
         name="offline-checklist",
     ),
     path("<int:pk>/", AuditDetailView.as_view(), name="audit-detail"),
+    path("<int:pk>/review/", AuditMarkReviewedView.as_view(), name="audit-mark-reviewed"),
     path(
-        "<int:pk>/review/",
-        AuditMarkReviewedView.as_view(),
-        name="audit-mark-reviewed",
+        "<int:pk>/request-changes/",
+        AuditRequestChangesView.as_view(),
+        name="audit-request-changes",
     ),
     path(
         "<int:pk>/export/print/",

@@ -103,6 +103,60 @@
       </div>
     </section>
 
+    {% if can_request_changes %}
+      <section class="space-y-4">
+        <div class="rounded-xl border border-border-subtle bg-surface-elevated p-6 shadow-soft">
+          <h2 class="text-lg font-semibold text-ink-900">Запросить правки у аудитора</h2>
+          <p class="text-sm text-ink-600">
+            Укажите, какие изменения необходимы. Сообщение отправится автору по email и зафиксируется в журнале действий.
+          </p>
+          <form
+            method="post"
+            action="{% url 'audits:audit-request-changes' audit.pk %}"
+            class="space-y-4"
+          >
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+
+            {% if request_changes_form.non_field_errors %}
+              <ul class="space-y-1 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
+                {% for error in request_changes_form.non_field_errors %}
+                  <li>{{ error }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+
+            <div class="space-y-2">
+              <label
+                for="{{ request_changes_form.message.id_for_label }}"
+                class="text-xs font-semibold uppercase tracking-wide text-ink-500"
+              >
+                {{ request_changes_form.message.label }}
+              </label>
+              {% if request_changes_form.message.errors %}
+                <ul class="space-y-1 text-xs text-danger-600">
+                  {% for error in request_changes_form.message.errors %}
+                    <li>{{ error }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+              {{ request_changes_form.message }}
+              {% if request_changes_form.message.help_text %}
+                <p class="text-xs text-ink-500">{{ request_changes_form.message.help_text }}</p>
+              {% endif %}
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <p class="text-xs text-ink-500">
+                Автор получит письмо с вашим комментарием и ссылкой на список аудитов.
+              </p>
+              <button type="submit" class="btn btn--primary">Отправить запрос</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    {% endif %}
+
     <section class="space-y-4">
       <h2 class="text-lg font-semibold text-ink-900">Информационная карта объекта</h2>
       {% if object_info_has_values %}

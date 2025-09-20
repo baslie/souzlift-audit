@@ -348,6 +348,53 @@ class Audit(models.Model):
             else:
                 self.save(update_fields=["status"])
 
+    def request_changes(self, *, actor: object | None = None, message: str) -> None:
+        """Запросить у аудитора корректировки по отправленному аудиту."""
+
+        if self.status != self.Status.SUBMITTED:
+            raise ValidationError(
+                {
+                    "status": ValidationError(
+                        _("Запрос правок доступен только для отправленных аудитов."),
+                    )
+                }
+            )
+
+        message_clean = (message or "").strip()
+        if not message_clean:
+            raise ValidationError(
+                {
+                    "message": ValidationError(
+                        _("Опишите, какие изменения требуются."),
+                    )
+                }
+            )
+
+        log_actor = actor if isinstance(actor, models.Model) else None
+
+        now = timezone.now()
+        if self.pk:
+            Audit.objects.filter(pk=self.pk).update(updated_at=now)
+            self.updated_at = now
+
+        AuditLogEntry.objects.log_action(
+            action=AuditLogEntry.Action.AUDIT_CHANGES_REQUESTED,
+            entity=self,
+            user=log_actor or getattr(self, "_log_actor", None),
+            payload={
+                "message": message_clean,
+                "status": self.status,
+            },
+        )
+
+        from .emails import notify_audit_changes_requested
+
+        notify_audit_changes_requested(
+            self,
+            message_clean,
+            actor=log_actor or getattr(self, "_log_actor", None),
+        )
+
     def recalculate_total_score(self, *, commit: bool = True) -> int:
         """Aggregate score across responses and optionally persist the result."""
 
@@ -865,6 +912,7 @@ class AuditLogEntry(models.Model):
     class Action(models.TextChoices):
         AUDIT_CREATED = "audit.created", _("Аудит создан")
         AUDIT_STATUS_CHANGED = "audit.status_changed", _("Статус аудита изменён")
+        AUDIT_CHANGES_REQUESTED = "audit.changes_requested", _("Запрошены правки по аудиту")
         RESPONSE_CREATED = "response.created", _("Ответ добавлен")
         RESPONSE_UPDATED = "response.updated", _("Ответ обновлён")
         RESPONSE_DELETED = "response.deleted", _("Ответ удалён")

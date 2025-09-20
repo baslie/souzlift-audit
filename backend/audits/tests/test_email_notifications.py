@@ -61,6 +61,22 @@ class AuditEmailNotificationsTests(TestCase):
         self.assertIn("аудит просмотрен", message.subject.lower())
         self.assertEqual(message.recipients(), ["auditor@example.com"])
 
+    def test_auditor_notified_when_changes_requested(self) -> None:
+        self.audit.start(actor=self.auditor)
+        self.audit.submit(actor=self.auditor)
+        mail.outbox.clear()
+
+        self.audit.request_changes(
+            actor=self.admin,
+            message="Добавьте фотографии для раздела безопасности.",
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertIn("правк", message.subject.lower())
+        self.assertIn("фотографии", message.body)
+        self.assertEqual(message.recipients(), ["auditor@example.com"])
+
     def test_offline_sync_error_notifies_admins(self) -> None:
         batch = OfflineSyncBatch.objects.create(
             user=self.auditor,

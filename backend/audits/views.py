@@ -32,6 +32,7 @@ from accounts.permissions import (
     restrict_queryset_for_user,
 )
 
+from .forms import AuditRequestChangesForm
 from .models import AttachmentLimits, Audit, AuditAttachment, AuditResponse
 from .tokens import read_attachment_token
 from .reporting import build_audit_report
@@ -444,6 +445,11 @@ class AuditDetailView(AuditExportBaseView, TemplateView):
         report = self.get_report()
         badge_classes = AuditListView.get_status_badge_classes()
         default_badge = "border-border-subtle bg-surface-subtle text-ink-600"
+        request_changes_form = kwargs.get("request_changes_form") or context.get(
+            "request_changes_form"
+        )
+        if request_changes_form is None:
+            request_changes_form = AuditRequestChangesForm()
 
         context.update(
             {
@@ -455,6 +461,8 @@ class AuditDetailView(AuditExportBaseView, TemplateView):
                 "object_info_has_values": report.get("object_info_has_values", False),
                 "object_info_has_extra": report.get("object_info_has_extra", False),
                 "can_mark_reviewed": audit.status == Audit.Status.SUBMITTED,
+                "can_request_changes": audit.status == Audit.Status.SUBMITTED,
+                "request_changes_form": request_changes_form,
                 "back_url": self.get_back_url(),
                 "status_badge_class": badge_classes.get(audit.status, default_badge),
                 "default_status_badge_class": default_badge,
@@ -504,6 +512,42 @@ class AuditMarkReviewedView(RoleRequiredMixin, View):
         else:
             audit.mark_reviewed(actor=request.user)
             messages.success(request, _("Аудит отмечен как просмотренный."))
+
+        next_url = (request.POST.get("next") or "").strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect("audits:audit-detail", pk=audit.pk)
+
+
+class AuditRequestChangesView(AuditDetailView):
+    """Handle administrator requests for auditor corrections."""
+
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):  # type: ignore[override]
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
+        audit = self.get_audit()
+        form = AuditRequestChangesForm(request.POST)
+
+        if audit.status != Audit.Status.SUBMITTED:
+            messages.warning(
+                request,
+                _("Запросить правки можно только для отправленных аудитов."),
+            )
+            return redirect("audits:audit-detail", pk=audit.pk)
+
+        if not form.is_valid():
+            context = self.get_context_data(request_changes_form=form)
+            return self.render_to_response(context, status=400)
+
+        audit.request_changes(actor=request.user, message=form.cleaned_data["message"])
+        messages.success(request, _("Запрос на правки отправлен автору аудита."))
 
         next_url = (request.POST.get("next") or "").strip()
         if next_url and url_has_allowed_host_and_scheme(
