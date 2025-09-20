@@ -12,7 +12,7 @@
   <body class="{% block body_class %}app-shell{% endblock %}" {% block body_attrs %}{% endblock %}>
     <div class="flex min-h-screen flex-col">
       <header class="app-header">
-        <div class="container flex items-center justify-between gap-6 py-4">
+        <div class="container flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex items-center gap-3">
             <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-lg font-semibold shadow-inner shadow-brand-900/30">СЛ</span>
             <div>
@@ -21,9 +21,36 @@
             </div>
           </div>
           <div class="flex items-center gap-4 text-sm font-medium">
-            {% block header_links %}{% endblock %}
+            {% block header_links %}
+              {% if request.user.is_authenticated %}
+                <a href="{% url 'accounts:password-change' %}" class="app-header__link">Сменить пароль</a>
+                {% if primary_navigation.show_admin_link %}
+                  <a href="{% url 'admin:index' %}" class="app-header__link">Django Admin</a>
+                {% endif %}
+                <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
+              {% else %}
+                <a href="{% url 'accounts:login' %}" class="app-header__link">Вход</a>
+              {% endif %}
+            {% endblock %}
           </div>
         </div>
+        {% block header_nav %}
+          {% if primary_navigation.items %}
+            <nav class="border-t border-brand-500/20 bg-brand-500/5 py-2" aria-label="Основная навигация">
+              <div class="container flex flex-wrap gap-2 text-sm font-medium">
+                {% for item in primary_navigation.items %}
+                  <a
+                    href="{{ item.url }}"
+                    class="app-header__link aria-current:font-semibold aria-current:text-white"
+                    {% if item.key == primary_navigation.active %}aria-current="page"{% endif %}
+                  >
+                    {{ item.label }}
+                  </a>
+                {% endfor %}
+              </div>
+            </nav>
+          {% endif %}
+        {% endblock %}
       </header>
       {% block body_top %}{% endblock %}
       <main class="container flex-1 py-10">

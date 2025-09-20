@@ -69,7 +69,10 @@ class AuditDueFilter(admin.SimpleListFilter):
         if value == "today":
             return queryset.filter(planned_date=today)
         if value == "week":
-            end_of_week = today + timedelta(days=6 - today.weekday())
+            days_remaining = 6 - today.weekday()
+            if days_remaining <= 0:
+                days_remaining = 6
+            end_of_week = today + timedelta(days=days_remaining)
             return queryset.filter(planned_date__range=(today, end_of_week))
         if value == "without_plan":
             return queryset.filter(planned_date__isnull=True)
