@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from . import base as base_settings
 
@@ -44,18 +43,12 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 X_FRAME_OPTIONS = "DENY"
 
-# Logging configuration with rotating file handler for production deployments.
-log_file = Path(os.environ.get("DJANGO_LOG_FILE", str(BASE_DIR / "logs" / "app.log")))
-log_file.parent.mkdir(parents=True, exist_ok=True)
-LOGGING["handlers"]["file"] = {
-    "class": "logging.handlers.RotatingFileHandler",
-    "formatter": "verbose",
-    "filename": str(log_file),
-    "maxBytes": env_int("DJANGO_LOG_MAX_BYTES", 5 * 1024 * 1024),
-    "backupCount": env_int("DJANGO_LOG_BACKUP_COUNT", 10),
-    "encoding": "utf-8",
-    "level": LOG_LEVEL,
-}
-LOGGING["loggers"]["django"]["handlers"] = ["console", "file"]
-LOGGING["loggers"]["django.request"]["handlers"] = ["console", "file"]
-LOGGING["root"]["handlers"] = ["console", "file"]
+# Logging configuration with rotating file handlers for production deployments.
+LOGGING["loggers"]["django"]["handlers"] = ["console", "app_file"]
+LOGGING["loggers"]["django.request"]["handlers"] = ["console", "app_file"]
+LOGGING["loggers"]["audits.offline_sync"]["handlers"] = [
+    "console",
+    "app_file",
+    "offline_sync_file",
+]
+LOGGING["root"]["handlers"] = ["console", "app_file"]

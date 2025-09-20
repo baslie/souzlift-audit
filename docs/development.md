@@ -26,7 +26,11 @@
 - Секретный ключ задаётся переменной `DJANGO_SECRET_KEY`. В режиме разработки допускается значение по умолчанию, но для тестовых/боевых стендов необходимо указать собственный ключ.
 - Список доменов и адресов, с которых разрешены запросы, задаётся через `DJANGO_ALLOWED_HOSTS` (перечисление через запятую). Для HTTPS-окружений дополнительно укажите `DJANGO_CSRF_TRUSTED_ORIGINS`.
 - Почтовые параметры управляются переменными `DJANGO_EMAIL_HOST`, `DJANGO_EMAIL_PORT`, `DJANGO_EMAIL_HOST_USER`, `DJANGO_EMAIL_HOST_PASSWORD`, `DJANGO_EMAIL_USE_TLS`, `DJANGO_EMAIL_USE_SSL`, `DJANGO_DEFAULT_FROM_EMAIL`. В профиле `dev` используется консольный backend, поэтому сообщения выводятся в терминал.
-- Для настройки логирования можно использовать `DJANGO_LOG_LEVEL` (уровень сообщений), `DJANGO_LOG_FILE` (путь до файла с логами в продакшене), `DJANGO_LOG_MAX_BYTES` и `DJANGO_LOG_BACKUP_COUNT` (параметры ротации).
+- Для настройки логирования доступны переменные:
+  - `DJANGO_LOG_LEVEL` — уровень сообщений для консоли и файловых логов;
+  - `DJANGO_LOG_DIR` — базовая директория для файлов журналов (по умолчанию `backend/logs`);
+  - `DJANGO_LOG_FILE`, `DJANGO_LOG_MAX_BYTES`, `DJANGO_LOG_BACKUP_COUNT` — путь и параметры ротации основного файла логов приложения;
+  - `DJANGO_SYNC_LOG_FILE`, `DJANGO_SYNC_LOG_MAX_BYTES`, `DJANGO_SYNC_LOG_BACKUP_COUNT` — файл и ротация отдельного журнала ошибок офлайн-синхронизации.
 
 Дополнительные инструкции по развёртыванию и обслуживанию будут добавляться в каталоге `docs/` по мере реализации этапов T9–T12.
 
