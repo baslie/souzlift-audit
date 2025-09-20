@@ -691,6 +691,9 @@ class AuditAttachment(models.Model):
 
     def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
         attachment_id = self.pk
+        response = getattr(self, "response", None)
+        audit = getattr(response, "audit", None)
+        fallback_actor = getattr(audit, "created_by", None)
         payload = {
             "response_id": self.response_id,
             "filename": self.file.name,

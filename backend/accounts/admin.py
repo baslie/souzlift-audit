@@ -34,7 +34,7 @@ def generate_temporary_password(length: int = 12) -> str:
         secrets.choice(special),
     ]
 
-    for _ in range(length - len(required_characters)):
+    while len(required_characters) < length:
         required_characters.append(secrets.choice(alphabet))
 
     secrets.SystemRandom().shuffle(required_characters)
