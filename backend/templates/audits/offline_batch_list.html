@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% load static tz %}
+
+{% block title %}Офлайн-синхронизации · Союзлифт Аудит{% endblock %}
+{% block heading %}Офлайн-синхронизации{% endblock %}
+{% block subheading %}
+  <p class="text-sm text-ink-500">
+    Следите за состоянием офлайн-пакетов: просматривайте успешные и проблемные синхронизации, ищите по устройству, анализируйте
+    статус уведомлений об ошибках и экспортируйте данные для отчётности.
+  </p>
+{% endblock %}
+{% block actions %}
+  <a
+    href="?{% if querystring %}{{ querystring }}&{% endif %}export=csv"
+    class="btn btn--secondary"
+  >
+    Экспорт CSV
+  </a>
+{% endblock %}
+
+{% block content %}
+  <div class="space-y-8">
+    <section class="grid gap-4 md:grid-cols-4">
+      <div class="rounded-xl border border-border-subtle bg-surface-elevated p-4 shadow-soft">
+        <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">Всего пакетов</div>
+        <div class="mt-2 text-2xl font-semibold text-ink-900">{{ status_summary.total }}</div>
+      </div>
+      <div class="rounded-xl border border-border-subtle bg-surface-elevated p-4 shadow-soft">
+        <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">В обработке</div>
+        <div class="mt-2 text-2xl font-semibold text-ink-900">{{ status_summary.pending|default:0 }}</div>
+      </div>
+      <div class="rounded-xl border border-border-subtle bg-surface-elevated p-4 shadow-soft">
+        <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">Успешно</div>
+        <div class="mt-2 text-2xl font-semibold text-ink-900">{{ status_summary.applied|default:0 }}</div>
+      </div>
+      <div class="rounded-xl border border-border-subtle bg-surface-elevated p-4 shadow-soft">
+        <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">Ошибки</div>
+        <div class="mt-2 text-2xl font-semibold text-ink-900">{{ status_summary.error|default:0 }}</div>
+      </div>
+    </section>
+
+    <form method="get" class="grid gap-4 md:grid-cols-4 md:items-end">
+      <div>
+        <label for="id-start" class="form-label text-xs uppercase tracking-wide text-ink-500">Дата с</label>
+        <input
+          type="date"
+          id="id-start"
+          name="{{ start_param|default:'start' }}"
+          value="{{ start_value }}"
+          class="app-input"
+        />
+      </div>
+      <div>
+        <label for="id-end" class="form-label text-xs uppercase tracking-wide text-ink-500">Дата по</label>
+        <input
+          type="date"
+          id="id-end"
+          name="{{ end_param|default:'end' }}"
+          value="{{ end_value }}"
+          class="app-input"
+        />
+      </div>
+      <div>
+        <label for="id-status" class="form-label text-xs uppercase tracking-wide text-ink-500">Статус</label>
+        <select
+          id="id-status"
+          name="{{ status_param|default:'status' }}"
+          class="app-input app-input--select"
+        >
+          {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if value == status_value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="id-device" class="form-label text-xs uppercase tracking-wide text-ink-500">Устройство</label>
+        <input
+          type="search"
+          id="id-device"
+          name="{{ device_param|default:'device' }}"
+          value="{{ device_value }}"
+          placeholder="device-id"
+          class="app-input"
+        />
+      </div>
+      <div class="flex gap-2 md:col-span-4">
+        <button type="submit" class="btn btn--primary">Применить</button>
+        <a href="{% url 'audits:offline-batch-list' %}" class="btn btn--secondary">Сбросить</a>
+      </div>
+    </form>
+
+    {% if batches %}
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-border-subtle text-sm">
+          <thead class="bg-surface-subtle text-xs uppercase tracking-wide text-ink-500">
+            <tr>
+              <th scope="col" class="px-4 py-3 text-left font-semibold">Дата</th>
+              <th scope="col" class="px-4 py-3 text-left font-semibold">Устройство</th>
+              <th scope="col" class="px-4 py-3 text-left font-semibold">Статус</th>
+              <th scope="col" class="px-4 py-3 text-left font-semibold">Уведомление</th>
+              <th scope="col" class="px-4 py-3 text-left font-semibold">Пользователь</th>
+              <th scope="col" class="px-4 py-3 text-left font-semibold">Детали</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border-subtle bg-surface-elevated">
+            {% for batch in batches %}
+              <tr>
+                <td class="whitespace-nowrap px-4 py-3 font-medium text-ink-700">{{ batch.created_at|localtime|date:"d.m.Y H:i" }}</td>
+                <td class="px-4 py-3 text-ink-700">
+                  <div class="font-medium">{{ batch.device_id }}</div>
+                  <div class="text-xs text-ink-500">HTTP {{ batch.response_status }}</div>
+                </td>
+                <td class="px-4 py-3 text-ink-700">
+                  <span class="inline-flex rounded-full border border-border-subtle bg-surface-subtle px-3 py-1 text-xs font-semibold">
+                    {{ batch.get_status_display }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-ink-700">
+                  <div class="font-medium">{{ batch.get_error_notification_status_display }}</div>
+                  <div class="text-xs text-ink-500">
+                    {% if batch.error_notified_at %}
+                      {{ batch.error_notified_at|localtime|date:"d.m.Y H:i" }}
+                    {% else %}
+                      Не отправлено
+                    {% endif %}
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-ink-700">{{ batch.user.get_username|default:"—" }}</td>
+                <td class="px-4 py-3 text-ink-700">
+                  {% if batch.error_details %}
+                    <details class="group">
+                      <summary class="cursor-pointer text-xs font-semibold text-brand-600">Ошибка</summary>
+                      <pre class="mt-2 rounded-lg bg-surface-subtle p-3 text-xs text-ink-600">{{ batch.error_details_pretty }}</pre>
+                    </details>
+                  {% else %}
+                    <span class="text-xs text-ink-500">Без ошибок</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if page_obj %}
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-600">
+          <span>Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
+          <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+              <a
+                href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                class="btn btn--secondary btn--sm"
+              >
+                Назад
+              </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+              <a
+                href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                class="btn btn--secondary btn--sm"
+              >
+                Вперёд
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <p class="rounded-lg border border-dashed border-border bg-surface-subtle px-4 py-6 text-sm text-ink-500">
+        Пакеты не найдены. Измените фильтры или повторите попытку позже.
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}

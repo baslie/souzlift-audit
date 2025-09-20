@@ -1165,6 +1165,11 @@ class OfflineSyncBatch(models.Model):
         APPLIED = "applied", _("Применён")
         ERROR = "error", _("Ошибка")
 
+    class NotificationStatus(models.TextChoices):
+        PENDING = "pending", _("Не отправлено")
+        SENT = "sent", _("Отправлено")
+        SKIPPED = "skipped", _("Нет получателей")
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1216,6 +1221,19 @@ class OfflineSyncBatch(models.Model):
         default=0,
         help_text=_("HTTP-статус ответа на запрос синхронизации."),
     )
+    error_notification_status = models.CharField(
+        _("Статус уведомления"),
+        max_length=20,
+        choices=NotificationStatus.choices,
+        default=NotificationStatus.PENDING,
+        help_text=_("Результат отправки email-уведомления об ошибке."),
+    )
+    error_notified_at = models.DateTimeField(
+        _("Уведомление отправлено"),
+        null=True,
+        blank=True,
+        help_text=_("Когда администраторам было отправлено уведомление об ошибке."),
+    )
     created_at = models.DateTimeField(
         _("Создано"),
         auto_now_add=True,
@@ -1245,10 +1263,17 @@ class OfflineSyncBatch(models.Model):
         self.response_status = status
         if response is not None:
             self.response_payload = dict(response)
+        self.error_notification_status = self.NotificationStatus.PENDING
+        self.error_notified_at = None
         if not commit:
             return
 
-        update_fields = ["status", "response_status"]
+        update_fields = [
+            "status",
+            "response_status",
+            "error_notification_status",
+            "error_notified_at",
+        ]
         if response is not None:
             update_fields.append("response_payload")
 
@@ -1279,6 +1304,8 @@ class OfflineSyncBatch(models.Model):
         self.error_details = dict(details or {})
         self.response_payload = {}
         self.response_status = status
+        self.error_notification_status = self.NotificationStatus.PENDING
+        self.error_notified_at = None
         if commit:
             self.save(
                 update_fields=[
@@ -1286,6 +1313,8 @@ class OfflineSyncBatch(models.Model):
                     "error_details",
                     "response_payload",
                     "response_status",
+                    "error_notification_status",
+                    "error_notified_at",
                 ]
             )
 
@@ -1304,7 +1333,19 @@ class OfflineSyncBatch(models.Model):
 
             from .emails import notify_offline_sync_error
 
-            notify_offline_sync_error(self)
+            notification_sent = notify_offline_sync_error(self)
+            if notification_sent:
+                self.error_notification_status = self.NotificationStatus.SENT
+                self.error_notified_at = timezone.now()
+            else:
+                self.error_notification_status = self.NotificationStatus.SKIPPED
+                self.error_notified_at = None
+            self.save(
+                update_fields=[
+                    "error_notification_status",
+                    "error_notified_at",
+                ]
+            )
 
         self._log_offline_sync_error(status)
 

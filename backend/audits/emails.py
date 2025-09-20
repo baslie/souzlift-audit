@@ -111,12 +111,12 @@ def notify_audit_changes_requested(
     send_plain_email(subject, "\n".join(message_lines), [email])
 
 
-def notify_offline_sync_error(batch: "OfflineSyncBatch") -> None:
+def notify_offline_sync_error(batch: "OfflineSyncBatch") -> bool:
     """Notify administrators about an offline synchronisation error."""
 
     recipients = get_active_admin_emails()
     if not recipients:
-        return
+        return False
 
     actor = _format_user_label(getattr(batch, "user", None))
     subject = f"Ошибка офлайн-синхронизации: устройство {batch.device_id}"
@@ -137,6 +137,7 @@ def notify_offline_sync_error(batch: "OfflineSyncBatch") -> None:
             message_lines.append(f"- {key}: {value}")
 
     send_plain_email(subject, "\n".join(message_lines), recipients)
+    return True
 
 
 __all__ = [

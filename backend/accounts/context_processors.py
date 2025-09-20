@@ -25,6 +25,8 @@ _ACTIVE_VIEW_MAP: dict[str, str] = {
     "audits:audit-export-csv": "audits",
     "audits:audit-export-excel": "audits",
     "audits:audit-mark-reviewed": "audits",
+    "audits:audit-log-list": "monitoring",
+    "audits:offline-batch-list": "monitoring",
     "audits:offline-object-info": "audits",
     "audits:offline-checklist": "audits",
     "catalog:building-list": "buildings",
@@ -64,6 +66,7 @@ def _build_admin_navigation() -> Iterable[NavigationItem]:
     return (
         NavigationItem("dashboard", "Кабинет администратора", reverse("accounts:dashboard")),
         NavigationItem("audits", "Аудиты", reverse("audits:audit-list")),
+        NavigationItem("monitoring", "Мониторинг", reverse("audits:audit-log-list")),
         NavigationItem("buildings", "Здания", reverse("catalog:building-list")),
         NavigationItem("elevators", "Лифты", reverse("catalog:elevator-list")),
         NavigationItem("checklist", "Чек-лист", reverse("catalog:checklist-overview")),
