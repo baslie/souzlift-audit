@@ -76,6 +76,53 @@
 - Перед публикацией релиза обязательно выполняйте полный комплект тестов.
 - При невозможности запуска тестов фиксируйте причину и указывайте её в отчёте и Pull Request.
 
+### Локальное тестирование на Windows
+
+1. Установите [Python 3.11](https://www.python.org/downloads/windows/) и добавьте его в `PATH` (галочка *Add python.exe to PATH* при установке).
+2. Откройте PowerShell от имени пользователя и разрешите выполнение локальных скриптов (однократно):
+   ```powershell
+   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+   ```
+3. Перейдите в каталог проекта и создайте виртуальное окружение:
+   ```powershell
+   py -3.11 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+4. Установите переменные окружения для разработки (актуальны до закрытия сессии PowerShell):
+   ```powershell
+   $env:DJANGO_ENV = "dev"
+   $env:DJANGO_SECRET_KEY = "dev-secret-key"
+   $env:DJANGO_ALLOWED_HOSTS = "localhost,127.0.0.1"
+   ```
+   Для постоянной конфигурации используйте `setx` или файл `.env`, прочитанный через `python-dotenv` (после его добавления в зависимости).
+5. Выполните миграции и создайте суперпользователя:
+   ```powershell
+   python manage.py migrate
+   python manage.py createsuperuser
+   ```
+6. Запустите сервер разработки и убедитесь, что сайт доступен по адресу <http://127.0.0.1:8000/>:
+   ```powershell
+   python manage.py runserver
+   ```
+   Если порт занят, укажите другой: `python manage.py runserver 127.0.0.1:8001`.
+7. Прогоните автоматические проверки:
+   ```powershell
+   python manage.py check
+   pytest
+   ruff check backend/
+   ```
+   При необходимости добавьте ключ `-m` к `pytest` для запуска отдельных меток (`pytest -m "not slow"`).
+8. Для проверки фронтенд-стилей установите Node.js и выполните сборку Tailwind (по желанию):
+   ```powershell
+   npm install --global tailwindcss
+   tailwindcss -i backend/static/css/tailwind.src.css -o backend/static/css/tailwind.min.css --minify
+   ```
+9. Снимите дамп логов при ошибках (`Get-Content backend\logs\app.log -Wait`) и приложите его к отчёту.
+
+> **Совет:** используйте [Windows Terminal](https://aka.ms/terminal) или [WSL2](https://learn.microsoft.com/windows/wsl/) для более комфортной работы с командной строкой. При запуске сервера во встроенном брандмауэре появится запрос на разрешение доступа — подтвердите для профиля «Частная сеть».
+
 ## Работа с данными и медиа
 
 - Файлы БД и медиа размещаются в каталоге `backend/` (подкаталоги `db/`, `media/` будут добавлены на соответствующих этапах).

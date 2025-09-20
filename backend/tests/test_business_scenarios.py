@@ -139,8 +139,13 @@ class TestAuditScoreCalculations:
         audit.refresh_from_db()
         assert audit.total_score == 7
 
+        response_two.score = 4
+        response_two.save(update_fields=["score"])
+        audit.refresh_from_db()
+        assert audit.total_score == 9
+
         # Manual recalculation should return the same aggregated value.
         recalculated = Audit.recalculate_total_score_for(audit.pk)
-        assert recalculated == 7
+        assert recalculated == 9
         audit.refresh_from_db()
-        assert audit.total_score == 7
+        assert audit.total_score == 9
