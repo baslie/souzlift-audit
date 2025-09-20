@@ -371,6 +371,26 @@ class ChecklistAdminViewsTests(TestCase):
         self.assertIn("generated_at", preview)
         self.assertIn("preview_generated_at", response.context)
 
+    def test_overview_redirects_anonymous_user(self) -> None:
+        """Неаутентифицированные пользователи перенаправляются на страницу входа."""
+
+        response = self.client.get(reverse("catalog:checklist-overview"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.headers.get("Location", ""))
+
+    def test_auditor_cannot_access_admin_forms(self) -> None:
+        """Аудитор получает 403 при попытке открыть формы конструктора чек-листа."""
+
+        self.client.force_login(self.auditor)
+
+        create_url = reverse("catalog:checklist-category-create")
+        response_get = self.client.get(create_url)
+        self.assertEqual(response_get.status_code, 403)
+
+        response_post = self.client.post(create_url, {"code": "ops", "name": "Операции", "order": 0})
+        self.assertEqual(response_post.status_code, 403)
+        self.assertEqual(ChecklistCategory.objects.count(), 0)
+
     def test_admin_can_create_nested_entities(self) -> None:
         """Через формы можно создать полный набор элементов чек-листа."""
 
