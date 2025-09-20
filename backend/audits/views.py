@@ -8,11 +8,14 @@ import os
 from datetime import timedelta
 from urllib.parse import urlencode
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.signing import BadSignature, SignatureExpired
 from django.db.models import Count, Prefetch, Q, QuerySet
 from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views import View
@@ -48,11 +51,13 @@ class AuditListView(RoleQuerysetMixin, ListView):
     search_param = "q"
     status_param = "status"
     period_param = "period"
+    review_param = "review"
 
     _role_filtered_queryset: QuerySet[Audit] | None = None
     _status_filter: str | None = None
     _period_filter_value: str | None = None
     _search_query: str | None = None
+    _review_filter_value: str | None = None
 
     def dispatch(self, request, *args, **kwargs):  # type: ignore[override]
         if not request.user.is_authenticated:
@@ -68,6 +73,7 @@ class AuditListView(RoleQuerysetMixin, ListView):
         self._role_filtered_queryset = queryset
         queryset = self.filter_by_status(queryset)
         queryset = self.filter_by_period(queryset)
+        queryset = self.filter_by_review_state(queryset)
         queryset = self.apply_search(queryset)
         return queryset.order_by(self.ordering)
 
@@ -82,6 +88,14 @@ class AuditListView(RoleQuerysetMixin, ListView):
             ("7", _("За последние 7 дней")),
             ("30", _("За последние 30 дней")),
             ("90", _("За последние 90 дней")),
+        ]
+
+    def get_review_choices(self) -> list[tuple[str, str]]:
+        return [
+            ("", _("Все аудиты")),
+            ("pending", _("Ожидают проверки")),
+            ("active", _("В работе")),
+            ("reviewed", _("Просмотренные")),
         ]
 
     def get_status_filter(self) -> str:
@@ -110,6 +124,16 @@ class AuditListView(RoleQuerysetMixin, ListView):
             self._search_query = self.request.GET.get(self.search_param, "").strip()
         return self._search_query
 
+    def get_review_filter(self) -> str:
+        if not is_admin(self.request.user):
+            return ""
+        if self._review_filter_value is not None:
+            return self._review_filter_value
+        raw = self.request.GET.get(self.review_param, "").strip()
+        valid_values = {value for value, _ in self.get_review_choices() if value}
+        self._review_filter_value = raw if raw in valid_values else ""
+        return self._review_filter_value
+
     def filter_by_status(self, queryset: QuerySet[Audit]) -> QuerySet[Audit]:
         status = self.get_status_filter()
         if status:
@@ -121,6 +145,18 @@ class AuditListView(RoleQuerysetMixin, ListView):
         if period_days:
             threshold = timezone.now() - timedelta(days=period_days)
             queryset = queryset.filter(created_at__gte=threshold)
+        return queryset
+
+    def filter_by_review_state(self, queryset: QuerySet[Audit]) -> QuerySet[Audit]:
+        if not is_admin(self.request.user):
+            return queryset
+        review_value = self.get_review_filter()
+        if review_value == "pending":
+            return queryset.filter(status=Audit.Status.SUBMITTED)
+        if review_value == "active":
+            return queryset.filter(status__in=[Audit.Status.DRAFT, Audit.Status.IN_PROGRESS])
+        if review_value == "reviewed":
+            return queryset.filter(status=Audit.Status.REVIEWED)
         return queryset
 
     def apply_search(self, queryset: QuerySet[Audit]) -> QuerySet[Audit]:
@@ -192,6 +228,24 @@ class AuditListView(RoleQuerysetMixin, ListView):
         if search_query:
             active_filters.append({"label": _("Поиск"), "value": search_query})
 
+        review_value = self.get_review_filter()
+        review_filters: list[dict[str, object]] = []
+        if is_admin(self.request.user):
+            for value, label in self.get_review_choices():
+                review_filters.append(
+                    {
+                        "value": value,
+                        "label": label,
+                        "selected": value == review_value,
+                    }
+                )
+            if review_value:
+                review_label = next(
+                    (label for value, label in self.get_review_choices() if value == review_value),
+                    review_value,
+                )
+                active_filters.append({"label": _("Проверка"), "value": review_label})
+
         context.update(
             {
                 "status_filters": status_filters,
@@ -201,9 +255,12 @@ class AuditListView(RoleQuerysetMixin, ListView):
                 "search_param": self.search_param,
                 "status_param": self.status_param,
                 "period_param": self.period_param,
+                "review_filters": review_filters,
+                "review_param": self.review_param,
                 "querystring": self.get_preserved_querystring(),
                 "AuditStatus": Audit.Status,
                 "catalog_snapshot_url": reverse("catalog-snapshot"),
+                "is_admin": is_admin(self.request.user),
             }
         )
         badge_classes = self.get_status_badge_classes()
@@ -373,6 +430,89 @@ class AuditExportBaseView(RoleRequiredMixin):
         if question.get("type") == "text":
             return ""
         return str(question.get("comment_display") or "")
+
+
+class AuditDetailView(AuditExportBaseView, TemplateView):
+    """Detailed view for administrators to review a specific audit."""
+
+    template_name = "audits/admin_audit_detail.html"
+    allowed_roles = (UserProfile.Roles.ADMIN,)
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        audit = self.get_audit()
+        report = self.get_report()
+        badge_classes = AuditListView.get_status_badge_classes()
+        default_badge = "border-border-subtle bg-surface-subtle text-ink-600"
+
+        context.update(
+            {
+                "audit": audit,
+                "report": report,
+                "summary": report.get("summary", {}),
+                "checklist": report.get("checklist", []),
+                "object_info": report.get("object_info", []),
+                "object_info_has_values": report.get("object_info_has_values", False),
+                "object_info_has_extra": report.get("object_info_has_extra", False),
+                "can_mark_reviewed": audit.status == Audit.Status.SUBMITTED,
+                "back_url": self.get_back_url(),
+                "status_badge_class": badge_classes.get(audit.status, default_badge),
+                "default_status_badge_class": default_badge,
+                "AuditStatus": Audit.Status,
+            }
+        )
+        return context
+
+    def get_back_url(self) -> str:
+        candidate = self.request.GET.get("next") or self.request.GET.get("back")
+        if candidate and url_has_allowed_host_and_scheme(
+            candidate,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return candidate
+        return reverse("audits:audit-list")
+
+
+class AuditMarkReviewedView(RoleRequiredMixin, View):
+    """Mark an audit as reviewed from the administrator interface."""
+
+    allowed_roles = (UserProfile.Roles.ADMIN,)
+
+    def get_queryset(self) -> QuerySet[Audit]:
+        base_qs = Audit.objects.select_related(
+            "elevator",
+            "elevator__building",
+            "created_by",
+            "created_by__profile",
+        )
+        return restrict_queryset_for_user(base_qs, self.request.user, auditor_field="created_by")
+
+    def post(self, request, *args, **kwargs):  # type: ignore[override]
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
+        pk = kwargs.get("pk")
+        audit = self.get_queryset().filter(pk=pk).first()
+        if audit is None:
+            raise Http404("Аудит не найден или недоступен.")
+
+        if audit.status == Audit.Status.REVIEWED:
+            messages.info(request, _("Аудит уже отмечен как просмотренный."))
+        elif audit.status != Audit.Status.SUBMITTED:
+            messages.warning(request, _("Отметить просмотр можно только для отправленных аудитов."))
+        else:
+            audit.mark_reviewed(actor=request.user)
+            messages.success(request, _("Аудит отмечен как просмотренный."))
+
+        next_url = (request.POST.get("next") or "").strip()
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
+        return redirect("audits:audit-detail", pk=audit.pk)
 
 
 class OfflineObjectInfoView(RoleRequiredMixin, TemplateView):
