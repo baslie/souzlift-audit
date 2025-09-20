@@ -11,7 +11,7 @@
 - офлайн-режим с кэшированием справочников, локальным сохранением черновиков и последующей синхронизацией;
 - экспорт результатов для печати и в табличные форматы.
 
-Подробная архитектура описана в [architecture.md](architecture.md), а план реализации — в [AGENTS.md](AGENTS.md).
+Подробная архитектура описана в [docs/architecture/v1.md](docs/architecture/v1.md) (базовая версия) и дополнена моделью ролей в [docs/architecture/v2.md](docs/architecture/v2.md); план реализации фиксируется в [AGENTS.md](AGENTS.md).
 
 ## Стек и зависимости
 
@@ -27,15 +27,19 @@
 ## Структура репозитория
 
 - `backend/` — Django-проект (`config`) и приложения `accounts`, `catalog`, `audits`, тесты и статика.
-- `docs/` — дополнительная документация для разработчиков, эксплуатации и пользователей.
+- `docs/` — дополнительная документация для разработчиков, эксплуатации и пользователей:
+  - `architecture/` — системные описания (версии 1.0 и 2.0);
+  - `guides/` — руководства для разработчиков и пользователей;
+  - `runbooks/` — эксплуатационные регламенты и инструкции по развёртыванию;
+  - `checklists/` — контрольные листы регрессионных проверок;
+  - `reports/` — зафиксированные результаты UI-проверок.
 - `scripts/` — утилиты для резервного копирования, обслуживания и развёртывания.
 - `deploy/` — конфигурации и шаблоны для серверной инфраструктуры.
-- `architecture.md` — системное описание.
 - `data.csv` — демонстрационный набор исходных данных.
 
 ## Быстрый старт (разработка)
 
-1. Установите Python 3.11 и необходимые системные пакеты (см. [docs/development.md](docs/development.md)).
+1. Установите Python 3.11 и необходимые системные пакеты (см. [docs/guides/development.md](docs/guides/development.md)).
 2. Создайте виртуальное окружение и активируйте его:
    ```bash
    python -m venv .venv
@@ -58,15 +62,20 @@ pytest
 ruff check backend/
 ```
 
-Дополнительные указания приведены в [docs/development.md](docs/development.md) и [docs/operations.md](docs/operations.md).
+Дополнительные указания приведены в [docs/guides/development.md](docs/guides/development.md) и [docs/runbooks/operations.md](docs/runbooks/operations.md).
 
 ## Документация
 
-- [docs/development.md](docs/development.md) — руководство разработчика.
-- [docs/deployment.md](docs/deployment.md) — чек-листы развёртывания и настройки инфраструктуры.
-- [docs/operations.md](docs/operations.md) — регламенты сопровождения и резервного копирования.
-- [docs/user-guide.md](docs/user-guide.md) — инструкция для аудиторов и администраторов.
-- [docs/ui-regression-checklist.md](docs/ui-regression-checklist.md) — контрольный список регрессионного тестирования интерфейса.
+- [docs/architecture/v1.md](docs/architecture/v1.md) — базовая архитектура.
+- [docs/architecture/v2.md](docs/architecture/v2.md) — целевая архитектура 2.0.
+- [docs/guides/development.md](docs/guides/development.md) — руководство разработчика.
+- [docs/guides/windows-dev.md](docs/guides/windows-dev.md) — настройка окружения Windows.
+- [docs/guides/user-guide.md](docs/guides/user-guide.md) — инструкция для аудиторов и администраторов.
+- [docs/runbooks/deployment.md](docs/runbooks/deployment.md) — чек-листы развёртывания и настройки инфраструктуры.
+- [docs/runbooks/operations.md](docs/runbooks/operations.md) — регламенты сопровождения и резервного копирования.
+- [docs/checklists/ui-regression-checklist.md](docs/checklists/ui-regression-checklist.md) — контрольный список регрессионного тестирования интерфейса.
+- [docs/reports/ui-regressions-dev-2025-09-20.md](docs/reports/ui-regressions-dev-2025-09-20.md) — отчёт по регрессиям DEV от 20.09.2025.
+- [docs/reports/ui-regressions-dev-2025-10-01.md](docs/reports/ui-regressions-dev-2025-10-01.md) — отчёт по регрессиям DEV от 01.10.2025.
 
 ## Лицензия
 

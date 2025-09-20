@@ -1,6 +1,6 @@
 # Продакшен-развёртывание
 
-Документ описывает типовой сценарий вывода «Союзлифт Аудит» в продакшен согласно [архитектуре](../architecture.md#12-%D1%80%D0%B0%D0%B7%D0%B2%D1%91%D1%80%D1%82%D1%8B%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-%D0%B8-%D0%BE%D0%B1%D1%81%D0%BB%D1%83%D0%B6%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5) и плану задач [T11.1](../AGENTS.md). Рекомендации рассчитаны на виртуальный сервер под Linux (Ubuntu 22.04 LTS или совместимую систему) с обратным прокси Nginx и приложением, работающим под `gunicorn`. При необходимости их можно адаптировать под `uWSGI` (см. раздел 6).
+Документ описывает типовой сценарий вывода «Союзлифт Аудит» в продакшен согласно [архитектуре](../architecture/v1.md#12-%D1%80%D0%B0%D0%B7%D0%B2%D1%91%D1%80%D1%82%D1%8B%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-%D0%B8-%D0%BE%D0%B1%D1%81%D0%BB%D1%83%D0%B6%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5) и плану задач [T11.1](../../AGENTS.md). Рекомендации рассчитаны на виртуальный сервер под Linux (Ubuntu 22.04 LTS или совместимую систему) с обратным прокси Nginx и приложением, работающим под `gunicorn`. При необходимости их можно адаптировать под `uWSGI` (см. раздел 6).
 
 > **Важно.** Перед внедрением на боевом окружении скорректируйте параметры домена, путей и прав пользователя в соответствии с инфраструктурой заказчика.
 
@@ -83,10 +83,10 @@ PY
 | `DJANGO_STATIC_ROOT` | Путь к каталогу статики (`/opt/souzlift/backend/staticfiles`). |
 | `DJANGO_MEDIA_ROOT` | Путь к каталогу медиа (`/opt/souzlift/backend/media`). |
 | `DJANGO_LOG_DIR` | Каталог логов (`/var/log/souzlift`). |
-| `DJANGO_EMAIL_*` | Почтовые настройки согласно [docs/operations.md](operations.md). |
+| `DJANGO_EMAIL_*` | Почтовые настройки согласно [docs/runbooks/operations.md](operations.md). |
 | `DJANGO_SECURE_*` | HTTPS-настройки (HSTS, редиректы) в соответствии с политикой безопасности. |
 
-При необходимости добавьте переменные SMTP, OAuth и другие настройки, описанные в [docs/operations.md](operations.md).
+При необходимости добавьте переменные SMTP, OAuth и другие настройки, описанные в [docs/runbooks/operations.md](operations.md).
 
 ## 4. Служба systemd для gunicorn
 
@@ -155,11 +155,11 @@ sudo chcon -Rt httpd_sys_rw_content_t /opt/souzlift/backend/media
    sudo -u appuser DJANGO_ENV=prod /opt/souzlift/.venv/bin/python manage.py check
    sudo -u appuser DJANGO_ENV=prod /opt/souzlift/.venv/bin/pytest --maxfail=1 --disable-warnings
    ```
-5. Контролируйте использование диска и резервные копии согласно [docs/operations.md](operations.md).
+5. Контролируйте использование диска и резервные копии согласно [docs/runbooks/operations.md](operations.md).
 
 ## 8. Обновление приложения
 
-Для выпуска новой версии выполните шаги из [docs/operations.md](operations.md#13-%D1%80%D0%B0%D0%B7%D0%B2%D1%91%D1%80%D1%82%D1%8B%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-%D0%BD%D0%B0-%D0%BF%D1%80%D0%BE%D0%B4%D0%B0%D0%BA%D1%88%D0%B5%D0%BD%D0%B5) и перезапустите службы. Перед обновлением обязательно создайте резервную копию (раздел 2 в `operations.md`).
+Для выпуска новой версии выполните шаги из [docs/runbooks/operations.md](operations.md#13-%D1%80%D0%B0%D0%B7%D0%B2%D1%91%D1%80%D1%82%D1%8B%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-%D0%BD%D0%B0-%D0%BF%D1%80%D0%BE%D0%B4%D0%B0%D0%BA%D1%88%D0%B5%D0%BD%D0%B5) и перезапустите службы. Перед обновлением обязательно создайте резервную копию (раздел 2 в `operations.md`).
 
 ## 9. Чек-лист готовности
 
