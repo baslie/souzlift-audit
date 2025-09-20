@@ -189,30 +189,27 @@ def test_offline_sync_round_trip(client, settings, tmp_path):
         reset_protected_media_storage()
 
 
-def test_service_worker_served(client, monkeypatch):
+def test_service_worker_served(client):
     """Service worker endpoint should stream pre-built bundle with correct headers."""
 
     asset_path = finders.find(ServiceWorkerView.static_path)
     assert asset_path, "Service worker asset should exist in static directories."
 
-    class LocalStaticStorage:
-        def open(self, path: str):
-            assert path == ServiceWorkerView.static_path
-            return open(asset_path, "rb")
-
-    monkeypatch.setattr("config.views.staticfiles_storage", LocalStaticStorage())
-
     response = client.get(reverse("service-worker"))
     assert response.status_code == 200
     assert response["Content-Type"].startswith("application/javascript")
     assert response["Service-Worker-Allowed"] == "/"
-    content = response.content.decode("utf-8")
-    assert "CACHE_PREFIX" in content
-    assert "PRECACHE_URLS" in content
+
+    with open(asset_path, "rb") as file_handle:
+        expected_content = file_handle.read()
+
+    assert response.content == expected_content
 
 
 def test_service_worker_missing_file_returns_404(client, monkeypatch):
     """The view should return 404 when the underlying static asset is absent."""
+
+    monkeypatch.setattr("config.views.finders.find", lambda path: None)
 
     class MissingStaticStorage:
         def open(self, path: str):
