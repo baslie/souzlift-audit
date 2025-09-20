@@ -1,6 +1,8 @@
 """Views for the audits application."""
 from __future__ import annotations
 
+import csv
+import io
 import mimetypes
 import os
 from datetime import timedelta
@@ -8,7 +10,7 @@ from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.signing import BadSignature, SignatureExpired
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, Prefetch, Q, QuerySet
 from django.http import FileResponse, Http404, HttpResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -16,11 +18,20 @@ from django.utils.translation import gettext_lazy as _
 from django.views import View
 from django.views.generic import ListView, TemplateView
 
-from accounts.models import UserProfile
-from accounts.permissions import RoleQuerysetMixin, RoleRequiredMixin, is_admin
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
-from .models import AttachmentLimits, Audit, AuditAttachment
+from accounts.models import UserProfile
+from accounts.permissions import (
+    RoleQuerysetMixin,
+    RoleRequiredMixin,
+    is_admin,
+    restrict_queryset_for_user,
+)
+
+from .models import AttachmentLimits, Audit, AuditAttachment, AuditResponse
 from .tokens import read_attachment_token
+from .reporting import build_audit_report
 from .services import build_catalog_snapshot_for_user, build_checklist_structure
 
 
@@ -266,6 +277,104 @@ class AttachmentDownloadView(LoginRequiredMixin, View):
         return getattr(user, "pk", None) == author_id
 
 
+class AuditExportBaseView(RoleRequiredMixin):
+    """Shared helpers for audit export views."""
+
+    allowed_roles = (UserProfile.Roles.AUDITOR, UserProfile.Roles.ADMIN)
+
+    _audit_instance: Audit | None = None
+    _report_cache: dict[str, object] | None = None
+    _checklist_structure: dict[str, object] | None = None
+
+    def dispatch(self, request, *args, **kwargs):  # type: ignore[override]
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self) -> QuerySet[Audit]:  # type: ignore[override]
+        response_qs = (
+            AuditResponse.objects.select_related(
+                "question",
+                "question__section",
+                "question__section__category",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "attachments",
+                    queryset=AuditAttachment.objects.order_by("uploaded_at"),
+                )
+            )
+            .order_by(
+                "question__section__category__order",
+                "question__section__order",
+                "question__order",
+                "question_id",
+            )
+        )
+        base_qs = (
+            Audit.objects.select_related("elevator", "elevator__building", "created_by")
+            .prefetch_related(Prefetch("responses", queryset=response_qs))
+            .order_by("-created_at", "-id")
+        )
+        return restrict_queryset_for_user(
+            base_qs, self.request.user, auditor_field="created_by"
+        )
+
+    def get_audit(self) -> Audit:
+        if self._audit_instance is None:
+            pk = self.kwargs.get("pk")
+            audit = self.get_queryset().filter(pk=pk).first()
+            if audit is None:
+                raise Http404("Аудит не найден или недоступен.")
+            self._audit_instance = audit
+        return self._audit_instance
+
+    def get_checklist_structure(self) -> dict[str, object]:
+        if self._checklist_structure is None:
+            self._checklist_structure = build_checklist_structure()
+        return self._checklist_structure
+
+    def get_report(self) -> dict[str, object]:
+        if self._report_cache is None:
+            self._report_cache = build_audit_report(
+                self.get_audit(), checklist_structure=self.get_checklist_structure()
+            )
+        return self._report_cache
+
+    def format_datetime(self, value) -> str:
+        if value is None:
+            return ""
+        return timezone.localtime(value).strftime("%d.%m.%Y %H:%M")
+
+    def format_flag(self, value: bool) -> str:
+        return str(_("Да")) if value else str(_("Нет"))
+
+    def format_attachments(self, attachments: list[AuditAttachment]) -> str:
+        if not attachments:
+            return ""
+        items: list[str] = []
+        for attachment in attachments:
+            url = attachment.get_download_url()
+            if hasattr(self, "request"):
+                url = self.request.build_absolute_uri(url)
+            caption = (attachment.caption or "").strip()
+            if caption:
+                items.append(f"{caption} ({url})")
+            else:
+                items.append(url)
+        return "; ".join(items)
+
+    def get_question_answer(self, question: dict[str, object]) -> str:
+        if question.get("type") == "text":
+            return str(question.get("answer_display") or "—")
+        return str(question.get("value_display") or "—")
+
+    def get_question_comment(self, question: dict[str, object]) -> str:
+        if question.get("type") == "text":
+            return ""
+        return str(question.get("comment_display") or "")
+
+
 class OfflineObjectInfoView(RoleRequiredMixin, TemplateView):
     """Offline-friendly form for filling audit object information."""
 
@@ -329,9 +438,224 @@ class OfflineChecklistView(RoleRequiredMixin, TemplateView):
         return context
 
 
+class AuditPrintView(AuditExportBaseView, TemplateView):
+    """Render a printable HTML representation of an audit."""
+
+    template_name = "audits/export_print.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        report = self.get_report()
+        checklist_display: list[dict[str, object]] = []
+        for category in report["checklist"]:
+            section_entries: list[dict[str, object]] = []
+            for section in category["sections"]:
+                question_entries: list[dict[str, object]] = []
+                for question in section["questions"]:
+                    attachments_info = [
+                        {
+                            "caption": attachment.caption,
+                            "url": self.request.build_absolute_uri(
+                                attachment.get_download_url()
+                            ),
+                        }
+                        for attachment in question.get("attachments", [])
+                    ]
+                    question_copy = question.copy()
+                    question_copy["attachments_for_display"] = attachments_info
+                    question_entries.append(question_copy)
+                section_entries.append(
+                    {
+                        "title": section.get("title"),
+                        "description": section.get("description"),
+                        "questions": question_entries,
+                    }
+                )
+            checklist_display.append(
+                {
+                    "name": category.get("name"),
+                    "sections": section_entries,
+                }
+            )
+        context.update(
+            {
+                "audit": self.get_audit(),
+                "report": report,
+                "object_info": report["object_info"],
+                "object_info_has_values": report["object_info_has_values"],
+                "checklist": checklist_display,
+                "summary": report["summary"],
+            }
+        )
+        return context
+
+
+class AuditCSVExportView(AuditExportBaseView, View):
+    """Generate a CSV export for an audit."""
+
+    http_method_names = ["get"]
+
+    def get(self, request, *args, **kwargs):  # type: ignore[override]
+        audit = self.get_audit()
+        report = self.get_report()
+        summary = report["summary"]
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+
+        metadata_rows = [
+            ("Аудит", f"#{audit.pk}"),
+            ("Объект", str(audit.elevator.building)),
+            ("Лифт", audit.elevator.identifier),
+            ("Статус", audit.get_status_display()),
+            ("Автор", str(audit.created_by)),
+            ("Суммарный балл", audit.total_score),
+            ("Плановая дата", audit.planned_date.isoformat() if audit.planned_date else ""),
+            ("Начато", self.format_datetime(audit.started_at)),
+            ("Завершено", self.format_datetime(audit.finished_at)),
+            ("Всего вопросов", summary["total_questions"]),
+            ("Заполнено", summary["answered_questions"]),
+            ("Комментарии", summary["comments_total"]),
+            ("Вложения", summary["attachments_total"]),
+            ("Пометки", summary["flagged_total"]),
+        ]
+        writer.writerows(metadata_rows)
+        writer.writerow([])
+        writer.writerow(
+            [
+                "Категория",
+                "Раздел",
+                "Вопрос",
+                "Ответ",
+                "Комментарий",
+                "Пометка",
+                "Вложения",
+            ]
+        )
+
+        for category in report["checklist"]:
+            for section in category["sections"]:
+                for question in section["questions"]:
+                    attachments = self.format_attachments(question.get("attachments", []))
+                    writer.writerow(
+                        [
+                            category.get("name", ""),
+                            section.get("title", ""),
+                            question.get("text", ""),
+                            self.get_question_answer(question),
+                            self.get_question_comment(question),
+                            self.format_flag(bool(question.get("is_flagged"))),
+                            attachments,
+                        ]
+                    )
+
+        response = HttpResponse(
+            buffer.getvalue().encode("utf-8-sig"),
+            content_type="text/csv; charset=utf-8",
+        )
+        response["Content-Disposition"] = f'attachment; filename="audit-{audit.pk}.csv"'
+        return response
+
+
+class AuditExcelExportView(AuditExportBaseView, View):
+    """Generate an XLSX spreadsheet with audit results."""
+
+    http_method_names = ["get"]
+
+    def get(self, request, *args, **kwargs):  # type: ignore[override]
+        audit = self.get_audit()
+        report = self.get_report()
+        summary = report["summary"]
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Аудит"
+
+        workbook.properties.title = f"Audit #{audit.pk}"
+
+        meta_rows = [
+            ["Аудит", f"#{audit.pk}"],
+            ["Объект", str(audit.elevator.building)],
+            ["Лифт", audit.elevator.identifier],
+            ["Статус", audit.get_status_display()],
+            ["Автор", str(audit.created_by)],
+            ["Суммарный балл", audit.total_score],
+            ["Плановая дата", audit.planned_date.isoformat() if audit.planned_date else ""],
+            ["Начато", self.format_datetime(audit.started_at)],
+            ["Завершено", self.format_datetime(audit.finished_at)],
+            ["Всего вопросов", summary["total_questions"]],
+            ["Заполнено", summary["answered_questions"]],
+            ["Комментарии", summary["comments_total"]],
+            ["Вложения", summary["attachments_total"]],
+            ["Пометки", summary["flagged_total"]],
+        ]
+        for row in meta_rows:
+            sheet.append(row)
+
+        sheet.append([])
+        header_row_index = sheet.max_row + 1
+        sheet.append(
+            [
+                "Категория",
+                "Раздел",
+                "Вопрос",
+                "Ответ",
+                "Комментарий",
+                "Пометка",
+                "Вложения",
+            ]
+        )
+
+        for category in report["checklist"]:
+            for section in category["sections"]:
+                for question in section["questions"]:
+                    attachments = self.format_attachments(question.get("attachments", []))
+                    sheet.append(
+                        [
+                            category.get("name", ""),
+                            section.get("title", ""),
+                            question.get("text", ""),
+                            self.get_question_answer(question),
+                            self.get_question_comment(question),
+                            self.format_flag(bool(question.get("is_flagged"))),
+                            attachments,
+                        ]
+                    )
+
+        column_widths = {
+            1: 24,
+            2: 24,
+            3: 60,
+            4: 18,
+            5: 40,
+            6: 12,
+            7: 50,
+        }
+        for column_index, width in column_widths.items():
+            sheet.column_dimensions[get_column_letter(column_index)].width = width
+
+        sheet.freeze_panes = f"A{header_row_index + 1}"
+
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+        )
+        response["Content-Disposition"] = f'attachment; filename="audit-{audit.pk}.xlsx"'
+        return response
+
+
 __all__ = [
     "AuditListView",
     "AttachmentDownloadView",
+    "AuditCSVExportView",
+    "AuditExcelExportView",
+    "AuditPrintView",
     "OfflineChecklistView",
     "OfflineObjectInfoView",
 ]

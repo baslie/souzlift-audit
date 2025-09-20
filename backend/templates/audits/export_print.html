@@ -1,0 +1,347 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Аудит #{{ audit.id }} · Союзлифт Аудит</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Inter", "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 2cm 1.5cm;
+        color: #1f2937;
+        background: #ffffff;
+      }
+      header {
+        border-bottom: 2px solid #e5e7eb;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+      }
+      h1 {
+        font-size: 1.75rem;
+        margin: 0;
+      }
+      .meta-grid,
+      .summary-grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        margin-bottom: 1.25rem;
+      }
+      .card {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        background: #f9fafb;
+      }
+      .card strong {
+        display: block;
+        font-size: 1.25rem;
+        margin-top: 0.25rem;
+      }
+      .card span.label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #6b7280;
+      }
+      table.meta-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.5rem;
+      }
+      table.meta-table th,
+      table.meta-table td {
+        border: 1px solid #e5e7eb;
+        padding: 0.55rem 0.75rem;
+        vertical-align: top;
+      }
+      table.meta-table th {
+        width: 35%;
+        background: #f3f4f6;
+        text-align: left;
+        font-weight: 600;
+      }
+      section {
+        margin-bottom: 2rem;
+      }
+      .category {
+        margin-bottom: 1.5rem;
+      }
+      .category h2 {
+        font-size: 1.2rem;
+        margin-bottom: 0.5rem;
+      }
+      .section h3 {
+        font-size: 1rem;
+        margin: 1rem 0 0.5rem;
+      }
+      .question {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        margin-bottom: 0.85rem;
+        background: #ffffff;
+        page-break-inside: avoid;
+      }
+      .question.is-flagged {
+        border-color: #f97316;
+        background: #fff7ed;
+      }
+      .question-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+      }
+      .question-text {
+        font-weight: 600;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.1rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .badge-flagged {
+        background: #fee2e2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+      }
+      .badge-offline {
+        background: #dbeafe;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+      }
+      .answer-value {
+        font-weight: 600;
+        color: #1d4ed8;
+      }
+      .question-comment,
+      .question-text-answer {
+        margin-top: 0.6rem;
+        font-size: 0.95rem;
+      }
+      .question-comment .label,
+      .question-text-answer .label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #6b7280;
+        display: block;
+        margin-bottom: 0.3rem;
+      }
+      .attachments {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+      }
+      .attachments figure {
+        margin: 0;
+        width: 160px;
+      }
+      .attachments img {
+        width: 100%;
+        height: auto;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        display: block;
+      }
+      .attachments figcaption {
+        margin-top: 0.35rem;
+        font-size: 0.75rem;
+        color: #4b5563;
+      }
+      @media print {
+        body {
+          padding: 1.5cm;
+        }
+        header {
+          border-color: #d1d5db;
+        }
+        a[href^="http"]::after {
+          content: " (" attr(href) ")";
+          font-size: 0.7rem;
+          color: #6b7280;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Аудит №{{ audit.id }}</h1>
+      <p>
+        {{ audit.elevator.building.address }} · Лифт: {{ audit.elevator.identifier }} ·
+        Статус: {{ audit.get_status_display }}
+      </p>
+    </header>
+
+    <section>
+      <h2>Ключевые показатели</h2>
+      <div class="summary-grid">
+        <div class="card">
+          <span class="label">Всего вопросов</span>
+          <strong>{{ summary.total_questions }}</strong>
+        </div>
+        <div class="card">
+          <span class="label">Заполнено</span>
+          <strong>{{ summary.answered_questions }}</strong>
+        </div>
+        <div class="card">
+          <span class="label">Комментарии</span>
+          <strong>{{ summary.comments_total }}</strong>
+        </div>
+        <div class="card">
+          <span class="label">Вложения</span>
+          <strong>{{ summary.attachments_total }}</strong>
+        </div>
+        <div class="card">
+          <span class="label">Пометки</span>
+          <strong>{{ summary.flagged_total }}</strong>
+        </div>
+        <div class="card">
+          <span class="label">Суммарный балл</span>
+          <strong>{{ audit.total_score }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Данные аудита</h2>
+      <table class="meta-table">
+        <tbody>
+          <tr>
+            <th>Плановая дата</th>
+            <td>{{ audit.planned_date|default:"—" }}</td>
+          </tr>
+          <tr>
+            <th>Начато</th>
+            <td>{{ audit.started_at|date:"d.m.Y H:i"|default:"—" }}</td>
+          </tr>
+          <tr>
+            <th>Завершено</th>
+            <td>{{ audit.finished_at|date:"d.m.Y H:i"|default:"—" }}</td>
+          </tr>
+          <tr>
+            <th>Автор</th>
+            <td>{{ audit.created_by }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Информационная карта объекта</h2>
+      {% if object_info_has_values %}
+        <table class="meta-table">
+          <tbody>
+            {% for item in object_info %}
+              <tr>
+                <th>{{ item.label }}</th>
+                <td>
+                  {% if item.value %}
+                    {% if item.is_multiline %}
+                      <pre style="margin:0; white-space:pre-wrap;">{{ item.value }}</pre>
+                    {% else %}
+                      {{ item.value }}
+                    {% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>Информационная карта не содержит данных.</p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Чек-лист</h2>
+      {% for category in checklist %}
+        <div class="category">
+          <h2>{{ category.name }}</h2>
+          {% for section in category.sections %}
+            <div class="section">
+              <h3>{{ section.title }}</h3>
+              {% if section.description %}
+                <p style="margin-top:0.25rem; color:#6b7280;">{{ section.description }}</p>
+              {% endif %}
+              {% for question in section.questions %}
+                <div class="question{% if question.is_flagged %} is-flagged{% endif %}">
+                  <div class="question-header">
+                    <div class="question-text">{{ question.text }}</div>
+                    <div class="question-flags" style="display:flex; gap:0.5rem; align-items:center;">
+                      {% if question.is_flagged %}
+                        <span class="badge badge-flagged">Пометка</span>
+                      {% endif %}
+                      {% if question.is_offline %}
+                        <span class="badge badge-offline">Офлайн</span>
+                      {% endif %}
+                      <span class="answer-value">
+                        {% if question.type == 'text' %}
+                          {{ question.answer_display|default:"—" }}
+                        {% else %}
+                          {{ question.value_display|default:"—" }}
+                        {% endif %}
+                      </span>
+                    </div>
+                  </div>
+
+                  {% if question.type == 'text' and question.answer_display %}
+                    <div class="question-text-answer">
+                      <span class="label">Ответ</span>
+                      <div>{{ question.answer_display|linebreaksbr }}</div>
+                    </div>
+                  {% elif question.comment_display %}
+                    <div class="question-comment">
+                      <span class="label">Комментарий</span>
+                      <div>{{ question.comment_display|linebreaksbr }}</div>
+                    </div>
+                  {% endif %}
+
+                  {% if question.attachments_for_display %}
+                    <div class="attachments">
+                      {% for attachment in question.attachments_for_display %}
+                        <figure>
+                          <img
+                            src="{{ attachment.url }}"
+                            alt="{{ attachment.caption|default:'Вложение' }}"
+                          />
+                          {% if attachment.caption %}
+                            <figcaption>{{ attachment.caption }}</figcaption>
+                          {% endif %}
+                          <figcaption>
+                            <a href="{{ attachment.url }}">Скачать</a>
+                          </figcaption>
+                        </figure>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              {% empty %}
+                <p>Вопросы отсутствуют.</p>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      {% empty %}
+        <p>Чек-лист ещё не настроен.</p>
+      {% endfor %}
+    </section>
+  </body>
+</html>

@@ -273,6 +273,27 @@
     </style>
 {% endblock %}
 
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if original %}
+        <li>
+            <a href="{% url 'audits:audit-export-print' pk=original.pk %}" target="_blank" rel="noopener">
+                {% trans "Печать" %}
+            </a>
+        </li>
+        <li>
+            <a href="{% url 'audits:audit-export-excel' pk=original.pk %}">
+                {% trans "Excel" %}
+            </a>
+        </li>
+        <li>
+            <a href="{% url 'audits:audit-export-csv' pk=original.pk %}">
+                {% trans "CSV" %}
+            </a>
+        </li>
+    {% endif %}
+{% endblock %}
+
 {% block after_field_sets %}
     {{ block.super }}
     {% if original %}
