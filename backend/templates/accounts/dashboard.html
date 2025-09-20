@@ -1,27 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Личный кабинет · Союзлифт Аудит{% endblock %}
 {% block header_links %}
-  <a href="{% url 'accounts:password-change' %}" class="text-slate-200 hover:text-white">Сменить пароль</a>
-  <a href="{% url 'accounts:logout' %}" class="text-slate-200 hover:text-white">Выйти</a>
+  <a href="{% url 'accounts:password-change' %}" class="app-header__link">Сменить пароль</a>
+  <a href="{% url 'accounts:logout' %}" class="app-header__link">Выйти</a>
 {% endblock %}
 {% block heading %}Личный кабинет{% endblock %}
 {% block subheading %}
   {% if profile %}
-    <p class="text-sm text-slate-500">Добро пожаловать, {{ profile.full_name|default:request.user.username }}.</p>
+    Добро пожаловать, {{ profile.full_name|default:request.user.username }}.
   {% else %}
-    <p class="text-sm text-slate-500">Добро пожаловать в систему Союзлифт Аудит.</p>
+    Добро пожаловать в систему Союзлифт Аудит.
   {% endif %}
 {% endblock %}
 {% block content %}
-  <div class="space-y-6 text-sm text-slate-700">
+  <div class="space-y-6 text-sm text-ink-700">
     <p>
       Используйте портал аудитора, чтобы создавать и синхронизировать проверки. Доступ к справочникам зданий и лифтов остаётся
       в этом разделе.
     </p>
     <dl class="grid gap-4 sm:grid-cols-2">
-      <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <dt class="text-xs uppercase tracking-wide text-slate-500">Роль</dt>
-        <dd class="text-base font-semibold text-slate-900">
+      <div class="app-card p-4">
+        <dt class="text-xs uppercase tracking-wide text-ink-500">Роль</dt>
+        <dd class="text-base font-semibold text-ink-900">
           {% if profile %}
             {% if profile.is_admin %}Администратор{% elif profile.is_auditor %}Аудитор{% else %}Пользователь{% endif %}
           {% else %}
@@ -29,9 +29,9 @@
           {% endif %}
         </dd>
       </div>
-      <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <dt class="text-xs uppercase tracking-wide text-slate-500">Последняя смена пароля</dt>
-        <dd class="text-base font-semibold text-slate-900">
+      <div class="app-card p-4">
+        <dt class="text-xs uppercase tracking-wide text-ink-500">Последняя смена пароля</dt>
+        <dd class="text-base font-semibold text-ink-900">
           {% if profile and profile.password_changed_at %}
             {{ profile.password_changed_at|date:"d.m.Y H:i" }}
           {% else %}
@@ -43,27 +43,27 @@
     <div class="grid gap-4 sm:grid-cols-3">
       <a
         href="{% url 'audits:audit-list' %}"
-        class="flex flex-col gap-2 rounded-lg border border-sky-200 bg-sky-50 p-4 text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-sky-100"
+        class="flex flex-col gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-brand-100"
       >
-        <span class="text-xs font-semibold uppercase tracking-wide text-sky-700">Рабочие процессы</span>
+        <span class="text-xs font-semibold uppercase tracking-wide text-brand-700">Рабочие процессы</span>
         <span class="text-lg font-semibold">Мои аудиты</span>
-        <span class="text-xs text-slate-600">Просматривайте выполненные проверки, готовьте офлайн-черновики и следите за статусами.</span>
+        <span class="text-xs text-ink-500">Просматривайте выполненные проверки, готовьте офлайн-черновики и следите за статусами.</span>
       </a>
       <a
         href="{% url 'catalog:building-list' %}"
-        class="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-100"
+        class="flex flex-col gap-2 rounded-2xl border border-success-200 bg-success-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-success-100"
       >
-        <span class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Справочники</span>
+        <span class="text-xs font-semibold uppercase tracking-wide text-success-700">Справочники</span>
         <span class="text-lg font-semibold">Здания</span>
-        <span class="text-xs text-slate-600">Добавляйте новые адреса и следите за статусом модерации.</span>
+        <span class="text-xs text-ink-500">Добавляйте новые адреса и следите за статусом модерации.</span>
       </a>
       <a
         href="{% url 'catalog:elevator-list' %}"
-        class="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-amber-100"
+        class="flex flex-col gap-2 rounded-2xl border border-warning-200 bg-warning-50 p-4 text-ink-800 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-warning-100"
       >
-        <span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Справочники</span>
+        <span class="text-xs font-semibold uppercase tracking-wide text-warning-700">Справочники</span>
         <span class="text-lg font-semibold">Лифты</span>
-        <span class="text-xs text-slate-600">Ведите учёт лифтов, их статуса и описания.</span>
+        <span class="text-xs text-ink-500">Ведите учёт лифтов, их статуса и описания.</span>
       </a>
     </div>
   </div>

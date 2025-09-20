@@ -9,15 +9,15 @@
     <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}" />
     {% block extra_css %}{% endblock %}
   </head>
-  <body class="{% block body_class %}bg-slate-100 text-slate-900 font-sans min-h-screen{% endblock %}" {% block body_attrs %}{% endblock %}>
+  <body class="{% block body_class %}app-shell{% endblock %}" {% block body_attrs %}{% endblock %}>
     <div class="flex min-h-screen flex-col">
-      <header class="bg-slate-900 text-white shadow">
+      <header class="app-header">
         <div class="container flex items-center justify-between gap-6 py-4">
           <div class="flex items-center gap-3">
-            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-lg font-semibold shadow-inner">СЛ</span>
+            <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-lg font-semibold shadow-inner shadow-brand-900/30">СЛ</span>
             <div>
               <p class="text-lg font-semibold tracking-wide">Союзлифт Аудит</p>
-              <p class="text-xs text-slate-200">Внутренний портал аудитов лифтов</p>
+              <p class="text-xs text-brand-100">Внутренний портал аудитов лифтов</p>
             </div>
           </div>
           <div class="flex items-center gap-4 text-sm font-medium">
@@ -26,12 +26,12 @@
         </div>
       </header>
       {% block body_top %}{% endblock %}
-      <main class="container flex-1 py-8">
+      <main class="container flex-1 py-10">
         {% block page_header %}
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h1 class="text-2xl font-semibold text-slate-900">{% block heading %}{% endblock %}</h1>
-            {% block subheading %}{% endblock %}
+            <h1 class="text-2xl font-semibold text-ink-900">{% block heading %}{% endblock %}</h1>
+            <div class="text-sm text-ink-500">{% block subheading %}{% endblock %}</div>
           </div>
           {% block actions %}{% endblock %}
         </div>
@@ -40,7 +40,7 @@
         <div class="mb-6 space-y-3">
           {% for message in messages %}
           <div
-            class="rounded-lg border px-4 py-3 text-sm shadow-sm {% if 'error' in message.tags %}border-red-300 bg-red-50 text-red-900{% elif 'warning' in message.tags %}border-amber-300 bg-amber-50 text-amber-900{% elif 'success' in message.tags %}border-emerald-300 bg-emerald-50 text-emerald-900{% else %}border-sky-300 bg-sky-50 text-sky-900{% endif %}"
+            class="{% if 'error' in message.tags %}app-alert--danger{% elif 'warning' in message.tags %}app-alert--warning{% elif 'success' in message.tags %}app-alert--success{% else %}app-alert--info{% endif %}"
             role="alert"
           >
             {{ message }}
@@ -48,15 +48,15 @@
           {% endfor %}
         </div>
         {% endif %}
-        <div class="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-          <div class="px-6 py-6">
+        <div class="app-card">
+          <div class="app-card__body">
             {% block content %}{% endblock %}
           </div>
         </div>
       </main>
       {% block body_bottom %}{% endblock %}
-      <footer class="border-t border-slate-200 bg-white">
-        <div class="container flex flex-col items-start gap-2 py-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+      <footer class="border-t border-border bg-surface-elevated">
+        <div class="container flex flex-col items-start gap-2 py-6 text-xs text-ink-500 sm:flex-row sm:items-center sm:justify-between">
           <p>&copy; {{ current_year }} Союзлифт. Все права защищены.</p>
           <div class="flex items-center gap-4">
             {% block footer_links %}{% endblock %}
