@@ -19,6 +19,8 @@ def trigger_audit_status_notifications(
     previous_status = getattr(instance, "_previous_status", None)
     status_changed = getattr(instance, "_status_changed", created)
 
+    actor = getattr(instance, "_log_actor", None)
+
     if created:
         if instance.status == Audit.Status.SUBMITTED:
             notify_audit_submitted(instance)
@@ -30,4 +32,4 @@ def trigger_audit_status_notifications(
     if instance.status == Audit.Status.SUBMITTED and previous_status != Audit.Status.SUBMITTED:
         notify_audit_submitted(instance)
     elif instance.status == Audit.Status.REVIEWED and previous_status != Audit.Status.REVIEWED:
-        notify_audit_reviewed(instance)
+        notify_audit_reviewed(instance, actor=actor)

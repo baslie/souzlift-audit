@@ -55,7 +55,9 @@ def notify_audit_submitted(audit: "Audit") -> None:
     send_plain_email(subject, "\n".join(message_lines), recipients)
 
 
-def notify_audit_reviewed(audit: "Audit") -> None:
+def notify_audit_reviewed(
+    audit: "Audit", *, actor: object | None = None
+) -> None:
     """Inform the auditor that their audit was reviewed by an administrator."""
 
     author = getattr(audit, "created_by", None)
@@ -65,11 +67,13 @@ def notify_audit_reviewed(audit: "Audit") -> None:
 
     subject = f"Аудит просмотрен: {audit}"
     admin_url = reverse("admin:audits_audit_change", args=[audit.pk])
+    reviewer = _format_user_label(actor)
     message_lines = [
         "Ваш аудит был рассмотрен администратором.",
         "",
         f"Идентификатор аудита: {audit.pk}",
         f"Объект: {audit.elevator}",
+        f"Администратор: {reviewer}",
         f"Текущий статус: {audit.get_status_display()}",
         "",
         "Вы можете открыть запись в административной панели, если у вас есть соответствующие права.",
