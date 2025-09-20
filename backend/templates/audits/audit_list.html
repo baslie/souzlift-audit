@@ -10,7 +10,7 @@
 {% endblock %}
 {% block heading %}Мои аудиты{% endblock %}
 {% block subheading %}
-  <p class="text-sm text-slate-500">
+  <p class="text-sm text-ink-500">
     Здесь отображаются завершённые и черновые проверки. Фильтруйте список по статусу или дате,
     а при отсутствии сети создавайте черновики — они сохранятся локально и синхронизируются при подключении.
   </p>
@@ -18,7 +18,7 @@
 {% block actions %}
   <button
     type="button"
-    class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+    class="btn btn--primary"
     data-portal-action="open-dialog"
   >
     Новый аудит (офлайн)
@@ -33,13 +33,13 @@
     data-object-info-url="{% url 'audits:offline-object-info' %}"
     data-sync-url="{% url 'offline-sync' %}"
   >
-    <div data-portal-flash class="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"></div>
+    <div data-portal-flash class="hidden app-alert--success font-medium"></div>
 
     <section class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 class="text-lg font-semibold text-slate-900">Офлайн-черновики</h2>
-          <p class="text-sm text-slate-500">
+          <h2 class="text-lg font-semibold text-ink-900">Офлайн-черновики</h2>
+          <p class="text-sm text-ink-500">
             Черновики сохраняются в памяти устройства и доступны без подключения к интернету. После синхронизации
             данные будут отправлены на сервер автоматически.
           </p>
@@ -47,7 +47,7 @@
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+            class="btn btn--secondary text-xs px-3 py-1.5"
             data-portal-action="open-dialog"
           >
             Создать черновик
@@ -56,14 +56,14 @@
       </div>
       <div
         data-sync-panel
-        class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+        class="rounded-xl border border-border-subtle bg-surface-subtle px-4 py-3 text-sm text-ink-600"
       >
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="space-y-1">
-            <p data-sync-status class="font-medium text-slate-700">
+            <p data-sync-status class="font-medium text-ink-700">
               Нет данных для синхронизации.
             </p>
-            <p data-sync-details class="hidden text-xs text-slate-500">
+            <p data-sync-details class="hidden text-xs text-ink-500">
               Как только появятся готовые к отправке черновики, здесь отобразится их количество.
             </p>
           </div>
@@ -71,23 +71,23 @@
             <button
               type="button"
               data-sync-trigger
-              class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+              class="btn btn--primary text-xs px-3 py-1.5"
             >
               Отправить данные
             </button>
           </div>
         </div>
-        <ul data-sync-errors class="mt-3 hidden list-disc space-y-1 pl-5 text-xs text-red-600"></ul>
+        <ul data-sync-errors class="mt-3 hidden list-disc space-y-1 pl-5 text-xs text-danger-600"></ul>
       </div>
       <div
         id="offline-support-warning"
-        class="hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        class="hidden app-alert--warning"
       >
         Браузер не поддерживает локальное хранилище IndexedDB. Офлайн-режим будет недоступен на этом устройстве.
       </div>
       <div
         id="offline-audit-empty"
-        class="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600"
+        class="rounded-xl border border-dashed border-border bg-surface-subtle px-4 py-6 text-sm text-ink-600"
       >
         Офлайн-черновиков пока нет. Нажмите «Новый аудит», чтобы подготовить проверку без подключения к сети.
       </div>
@@ -97,13 +97,13 @@
     <section class="space-y-6">
       <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 class="text-lg font-semibold text-slate-900">Синхронизированные аудиты</h2>
-          <p class="text-sm text-slate-500">Фильтры применяются только к данным, уже отправленным на сервер.</p>
+          <h2 class="text-lg font-semibold text-ink-900">Синхронизированные аудиты</h2>
+          <p class="text-sm text-ink-500">Фильтры применяются только к данным, уже отправленным на сервер.</p>
         </div>
         {% if active_filters %}
-          <div class="flex flex-wrap gap-2 text-xs text-slate-600">
+          <div class="flex flex-wrap gap-2 text-xs text-ink-600">
             {% for item in active_filters %}
-              <span class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-50 px-3 py-1 font-semibold">
+              <span class="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-3 py-1 font-semibold">
                 {{ item.label }}:
                 <span class="font-normal">{{ item.value }}</span>
               </span>
@@ -115,11 +115,11 @@
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {% for item in status_filters %}
           {% if item.value %}
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</div>
-              <div class="mt-2 text-2xl font-semibold text-slate-900">{{ item.count }}</div>
+            <div class="rounded-lg border border-border-subtle bg-surface-elevated p-4 shadow-sm">
+              <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{ item.label }}</div>
+              <div class="mt-2 text-2xl font-semibold text-ink-900">{{ item.count }}</div>
               {% if item.selected %}
-                <div class="mt-1 text-xs text-sky-600">Фильтр применён</div>
+                <div class="mt-1 text-xs text-brand-600">Фильтр применён</div>
               {% endif %}
             </div>
           {% endif %}
@@ -128,22 +128,22 @@
 
       <form method="get" class="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
         <div>
-          <label for="id-search" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Поиск</label>
+          <label for="id-search" class="form-label text-xs uppercase tracking-wide text-ink-500">Поиск</label>
           <input
             type="search"
             id="id-search"
             name="{{ search_param }}"
             value="{{ search_query }}"
             placeholder="Адрес здания или идентификатор лифта"
-            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+            class="app-input"
           />
         </div>
         <div>
-          <label for="id-status" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Статус</label>
+          <label for="id-status" class="form-label text-xs uppercase tracking-wide text-ink-500">Статус</label>
           <select
             id="id-status"
             name="{{ status_param }}"
-            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+            class="app-input app-input--select"
           >
             {% for item in status_filters %}
               <option value="{{ item.value }}" {% if item.selected %}selected{% endif %}>
@@ -153,11 +153,11 @@
           </select>
         </div>
         <div>
-          <label for="id-period" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Период</label>
+          <label for="id-period" class="form-label text-xs uppercase tracking-wide text-ink-500">Период</label>
           <select
             id="id-period"
             name="{{ period_param }}"
-            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+            class="app-input app-input--select"
           >
             {% for item in period_filters %}
               <option value="{{ item.value }}" {% if item.selected %}selected{% endif %}>{{ item.label }}</option>
@@ -167,13 +167,13 @@
         <div class="flex gap-2">
           <button
             type="submit"
-            class="inline-flex items-center rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+            class="btn btn--primary"
           >
             Применить
           </button>
           <a
             href="{% url 'audits:audit-list' %}"
-            class="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            class="btn btn--secondary"
           >
             Сбросить
           </a>
@@ -182,8 +182,8 @@
 
       {% if audits.object_list %}
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <table class="min-w-full divide-y divide-border-subtle text-sm">
+            <thead class="bg-surface-subtle text-xs uppercase tracking-wide text-ink-500">
               <tr>
                 <th scope="col" class="px-4 py-3 text-left font-semibold">Объект</th>
                 <th scope="col" class="px-4 py-3 text-left font-semibold">Статус</th>
@@ -191,14 +191,14 @@
                 <th scope="col" class="px-4 py-3 text-left font-semibold">Создан</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-200 bg-white">
+            <tbody class="divide-y divide-border-subtle bg-surface-elevated">
               {% for audit in audits.object_list %}
                 <tr class="align-top">
                   <td class="px-4 py-4">
-                    <div class="font-semibold text-slate-900">{{ audit.elevator.building.address }}</div>
-                    <div class="text-xs text-slate-500">Лифт: {{ audit.elevator.identifier }}</div>
+                    <div class="font-semibold text-ink-900">{{ audit.elevator.building.address }}</div>
+                    <div class="text-xs text-ink-500">Лифт: {{ audit.elevator.identifier }}</div>
                     {% if audit.planned_date %}
-                      <div class="mt-1 text-xs text-slate-400">Плановая дата: {{ audit.planned_date|date:"d.m.Y" }}</div>
+                      <div class="mt-1 text-xs text-ink-400">Плановая дата: {{ audit.planned_date|date:"d.m.Y" }}</div>
                     {% endif %}
                   </td>
                   <td class="px-4 py-4">
@@ -208,16 +208,16 @@
                       </span>
                     {% endwith %}
                     {% if audit.finished_at %}
-                      <div class="mt-2 text-xs text-slate-500">Завершено {{ audit.finished_at|date:"d.m.Y H:i" }}</div>
+                      <div class="mt-2 text-xs text-ink-500">Завершено {{ audit.finished_at|date:"d.m.Y H:i" }}</div>
                     {% elif audit.started_at %}
-                      <div class="mt-2 text-xs text-slate-500">Начато {{ audit.started_at|date:"d.m.Y H:i" }}</div>
+                      <div class="mt-2 text-xs text-ink-500">Начато {{ audit.started_at|date:"d.m.Y H:i" }}</div>
                     {% endif %}
                   </td>
                   <td class="px-4 py-4">
-                    <div class="text-base font-semibold text-slate-900">{{ audit.total_score }}</div>
-                    <div class="text-xs text-slate-500">Обновлено {{ audit.updated_at|date:"d.m.Y H:i" }}</div>
+                    <div class="text-base font-semibold text-ink-900">{{ audit.total_score }}</div>
+                    <div class="text-xs text-ink-500">Обновлено {{ audit.updated_at|date:"d.m.Y H:i" }}</div>
                   </td>
-                  <td class="px-4 py-4 text-xs text-slate-500">
+                  <td class="px-4 py-4 text-xs text-ink-500">
                     Создан {{ audit.created_at|date:"d.m.Y H:i" }}<br />
                     Автор: {{ audit.created_by.profile.full_name|default:audit.created_by.username }}
                   </td>
@@ -227,34 +227,34 @@
           </table>
         </div>
       {% else %}
-        <div class="rounded-lg border border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-600 shadow-sm">
+        <div class="rounded-xl border border-border-subtle bg-surface-elevated px-6 py-8 text-center text-sm text-ink-600 shadow-soft">
           По заданным условиям аудиты не найдены. Попробуйте изменить фильтры или сбросьте их.
         </div>
       {% endif %}
 
       {% if is_paginated %}
-        <div class="mt-6 flex items-center justify-between text-xs text-slate-600">
+        <div class="mt-6 flex items-center justify-between text-xs text-ink-600">
           <span>Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
           <div class="flex items-center gap-2">
             {% if page_obj.has_previous %}
               <a
                 href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
-                class="rounded border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50"
+                class="btn btn--secondary text-xs px-3 py-1"
               >
                 Назад
               </a>
             {% else %}
-              <span class="rounded border border-slate-200 px-3 py-1 text-slate-300">Назад</span>
+              <span class="rounded border border-border-subtle px-3 py-1 text-ink-300">Назад</span>
             {% endif %}
             {% if page_obj.has_next %}
               <a
                 href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
-                class="rounded border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50"
+                class="btn btn--secondary text-xs px-3 py-1"
               >
                 Вперёд
               </a>
             {% else %}
-              <span class="rounded border border-slate-200 px-3 py-1 text-slate-300">Вперёд</span>
+              <span class="rounded border border-border-subtle px-3 py-1 text-ink-300">Вперёд</span>
             {% endif %}
           </div>
         </div>
@@ -263,83 +263,83 @@
 
     <dialog
       id="offline-audit-dialog"
-      class="w-full max-w-xl rounded-2xl bg-white p-0 shadow-2xl"
+      class="w-full max-w-xl rounded-2xl bg-surface-elevated p-0 shadow-2xl"
       aria-labelledby="offline-audit-dialog-title"
     >
       <form data-offline-form class="space-y-0">
-        <div class="border-b border-slate-200 px-6 py-4">
-          <h2 id="offline-audit-dialog-title" class="text-lg font-semibold text-slate-900">Новый офлайн-аудит</h2>
-          <p class="mt-1 text-sm text-slate-500">
+        <div class="border-b border-border-subtle px-6 py-4">
+          <h2 id="offline-audit-dialog-title" class="text-lg font-semibold text-ink-900">Новый офлайн-аудит</h2>
+          <p class="mt-1 text-sm text-ink-500">
             Укажите минимальные сведения, чтобы подготовить черновик. Подробное заполнение чек-листа будет доступно после
             настройки соответствующих форм.
           </p>
         </div>
         <div class="space-y-4 px-6 py-6">
           <div>
-            <label for="id-offline-building" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+            <label for="id-offline-building" class="form-label text-xs uppercase tracking-wide text-ink-500"
               >Адрес или объект</label
             >
             <input
               type="text"
               id="id-offline-building"
               name="building"
-              class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              class="app-input"
               placeholder="Например, Советская 12"
               autocomplete="off"
             />
           </div>
           <div>
-            <label for="id-offline-elevator" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+            <label for="id-offline-elevator" class="form-label text-xs uppercase tracking-wide text-ink-500"
               >Лифт или идентификатор</label
             >
             <input
               type="text"
               id="id-offline-elevator"
               name="elevator"
-              class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              class="app-input"
               placeholder="Например, Лифт №3"
               autocomplete="off"
             />
           </div>
           <div>
-            <label for="id-offline-date" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+            <label for="id-offline-date" class="form-label text-xs uppercase tracking-wide text-ink-500"
               >Плановая дата</label
             >
             <input
               type="date"
               id="id-offline-date"
               name="planned_date"
-              class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              class="app-input"
             />
           </div>
           <div>
-            <label for="id-offline-note" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+            <label for="id-offline-note" class="form-label text-xs uppercase tracking-wide text-ink-500"
               >Примечание</label
             >
             <textarea
               id="id-offline-note"
               name="note"
               rows="3"
-              class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              class="app-input app-input--textarea"
               placeholder="Дополнительные сведения для себя"
             ></textarea>
           </div>
           <div
             data-offline-error
-            class="hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            class="hidden app-alert--danger"
           ></div>
         </div>
-        <div class="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+        <div class="flex items-center justify-end gap-3 border-t border-border-subtle px-6 py-4">
           <button
             type="button"
-            class="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            class="btn btn--secondary"
             data-portal-action="close-dialog"
           >
             Отмена
           </button>
           <button
             type="submit"
-            class="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+            class="btn btn--primary"
           >
             Сохранить черновик
           </button>
@@ -348,11 +348,11 @@
     </dialog>
 
     <template id="offline-audit-template">
-      <article class="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <article class="flex h-full flex-col justify-between rounded-lg border border-border-subtle bg-surface-elevated p-4 shadow-sm">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Черновик</div>
-            <h3 class="mt-1 text-lg font-semibold text-slate-900" data-field="title">Новый аудит</h3>
+            <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">Черновик</div>
+            <h3 class="mt-1 text-lg font-semibold text-ink-900" data-field="title">Новый аудит</h3>
           </div>
           <span
             class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"
@@ -361,36 +361,36 @@
             Ожидает синхронизации
           </span>
         </div>
-        <dl class="mt-4 space-y-2 text-xs text-slate-500">
+        <dl class="mt-4 space-y-2 text-xs text-ink-500">
           <div>
-            <dt class="font-semibold text-slate-600">Объект</dt>
+            <dt class="font-semibold text-ink-600">Объект</dt>
             <dd data-field="building">—</dd>
           </div>
           <div>
-            <dt class="font-semibold text-slate-600">Лифт</dt>
+            <dt class="font-semibold text-ink-600">Лифт</dt>
             <dd data-field="elevator">—</dd>
           </div>
           <div>
-            <dt class="font-semibold text-slate-600">Плановая дата</dt>
+            <dt class="font-semibold text-ink-600">Плановая дата</dt>
             <dd data-field="planned-date">—</dd>
           </div>
           <div>
-            <dt class="font-semibold text-slate-600">Обновлено</dt>
+            <dt class="font-semibold text-ink-600">Обновлено</dt>
             <dd data-field="updated">—</dd>
           </div>
         </dl>
-        <p data-field="sync-error" class="mt-3 hidden text-xs text-red-600"></p>
+        <p data-field="sync-error" class="mt-3 hidden text-xs text-danger-600"></p>
         <div class="mt-4 flex flex-wrap gap-2 text-xs">
           <button
             type="button"
-            class="inline-flex flex-1 items-center justify-center rounded-lg border border-slate-300 px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50"
+            class="btn btn--secondary flex-1 text-xs px-3 py-1.5"
             data-action="open"
           >
             Открыть
           </button>
           <button
             type="button"
-            class="inline-flex flex-1 items-center justify-center rounded-lg border border-red-200 px-3 py-1.5 font-semibold text-red-700 hover:bg-red-50"
+            class="btn btn--danger flex-1 text-xs px-3 py-1.5"
             data-action="delete"
           >
             Удалить
