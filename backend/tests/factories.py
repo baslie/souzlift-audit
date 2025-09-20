@@ -323,3 +323,5 @@ class OfflineSyncBatchFactory(factory.django.DjangoModelFactory):
     error_details = factory.LazyFunction(dict)
     response_payload = factory.LazyFunction(dict)
     response_status = 0
+    error_notification_status = audits_models.OfflineSyncBatch.NotificationStatus.PENDING
+    error_notified_at = None

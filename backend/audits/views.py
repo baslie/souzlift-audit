@@ -3,20 +3,35 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import mimetypes
 import os
-from datetime import timedelta
+from collections.abc import Iterable
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.signing import BadSignature, SignatureExpired
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import (
+    Case,
+    Count,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    QuerySet,
+    Subquery,
+    Value,
+    When,
+)
+from django.db.models.functions import Cast
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.translation import gettext_lazy as _
 from django.views import View
 from django.views.generic import ListView, TemplateView
@@ -33,7 +48,15 @@ from accounts.permissions import (
 )
 
 from .forms import AuditRequestChangesForm
-from .models import AttachmentLimits, Audit, AuditAttachment, AuditResponse
+from .models import (
+    AttachmentLimits,
+    Audit,
+    AuditAttachment,
+    AuditLogEntry,
+    AuditResponse,
+    AuditSignature,
+    OfflineSyncBatch,
+)
 from .tokens import read_attachment_token
 from .reporting import build_audit_report
 from .services import build_catalog_snapshot_for_user, build_checklist_structure
@@ -833,12 +856,487 @@ class AuditExcelExportView(AuditExportBaseView, View):
         return response
 
 
+class AuditLogEntryListView(RoleRequiredMixin, ListView):
+    """User-facing log viewer for administrators."""
+
+    model = AuditLogEntry
+    template_name = "audits/admin_log_list.html"
+    context_object_name = "log_entries"
+    paginate_by = 25
+    ordering = "-created_at"
+    allowed_roles = (UserProfile.Roles.ADMIN,)
+
+    start_param = "start"
+    end_param = "end"
+    audit_param = "audit"
+    entity_type_param = "entity_type"
+
+    _start_date: date | None = None
+    _end_date: date | None = None
+    _audit_filter: int | None = None
+    _entity_type_filter: str | None = None
+
+    ENTITY_TYPE_LABELS: dict[str, str] = {
+        "audits.audit": _("Аудит"),
+        "audits.auditresponse": _("Ответ чек-листа"),
+        "audits.auditattachment": _("Вложение"),
+        "audits.auditsignature": _("Подпись"),
+        "audits.offlinesyncbatch": _("Офлайн-пакет"),
+    }
+
+    def get(self, request, *args, **kwargs):  # type: ignore[override]
+        if request.GET.get("export") == "csv":
+            queryset = self.get_filtered_queryset()
+            return self._export_csv(queryset)
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self) -> QuerySet[AuditLogEntry]:  # type: ignore[override]
+        return self.get_filtered_queryset()
+
+    def get_filtered_queryset(self) -> QuerySet[AuditLogEntry]:
+        queryset = (
+            super()
+            .get_queryset()
+            .select_related("user")
+            .annotate(**self._audit_annotations())
+        )
+        queryset = self._filter_by_dates(queryset)
+        queryset = self._filter_by_entity_type(queryset)
+        queryset = self._filter_by_audit(queryset)
+        return queryset.order_by(self.ordering)
+
+    def _audit_annotations(self) -> dict[str, Case]:
+        audit_lookup = Subquery(
+            Audit.objects.filter(pk=Cast(OuterRef("entity_id"), IntegerField()))
+            .values("pk")[:1]
+        )
+        response_lookup = Subquery(
+            AuditResponse.objects.filter(
+                pk=Cast(OuterRef("entity_id"), IntegerField())
+            ).values("audit_id")[:1]
+        )
+        attachment_lookup = Subquery(
+            AuditAttachment.objects.filter(
+                pk=Cast(OuterRef("entity_id"), IntegerField())
+            ).values("response__audit_id")[:1]
+        )
+        signature_lookup = Subquery(
+            AuditSignature.objects.filter(
+                pk=Cast(OuterRef("entity_id"), IntegerField())
+            ).values("audit_id")[:1]
+        )
+
+        return {
+            "related_audit_id": Case(
+                When(
+                    entity_type="audits.audit",
+                    entity_id__regex=r"^\d+$",
+                    then=audit_lookup,
+                ),
+                When(
+                    entity_type="audits.auditresponse",
+                    entity_id__regex=r"^\d+$",
+                    then=response_lookup,
+                ),
+                When(
+                    entity_type="audits.auditattachment",
+                    entity_id__regex=r"^\d+$",
+                    then=attachment_lookup,
+                ),
+                When(
+                    entity_type="audits.auditsignature",
+                    entity_id__regex=r"^\d+$",
+                    then=signature_lookup,
+                ),
+                default=Value(None),
+                output_field=IntegerField(),
+            )
+        }
+
+    def _filter_by_dates(self, queryset: QuerySet[AuditLogEntry]) -> QuerySet[AuditLogEntry]:
+        start_date = self.get_start_date()
+        if start_date:
+            start_dt = timezone.make_aware(
+                datetime.combine(start_date, time.min),
+                timezone.get_current_timezone(),
+            )
+            queryset = queryset.filter(created_at__gte=start_dt)
+
+        end_date = self.get_end_date()
+        if end_date:
+            exclusive_end = end_date + timedelta(days=1)
+            end_dt = timezone.make_aware(
+                datetime.combine(exclusive_end, time.min),
+                timezone.get_current_timezone(),
+            )
+            queryset = queryset.filter(created_at__lt=end_dt)
+        return queryset
+
+    def _filter_by_entity_type(
+        self, queryset: QuerySet[AuditLogEntry]
+    ) -> QuerySet[AuditLogEntry]:
+        entity_type = self.get_entity_type_filter()
+        if entity_type and entity_type in self.ENTITY_TYPE_LABELS:
+            queryset = queryset.filter(entity_type=entity_type)
+        return queryset
+
+    def _filter_by_audit(
+        self, queryset: QuerySet[AuditLogEntry]
+    ) -> QuerySet[AuditLogEntry]:
+        audit_id = self.get_audit_filter()
+        if audit_id is None:
+            return queryset
+        audit_id_str = str(audit_id)
+        return queryset.filter(
+            Q(entity_type="audits.audit", entity_id=audit_id_str)
+            | Q(payload__audit_id=audit_id)
+            | Q(payload__audit_id=audit_id_str)
+            | Q(related_audit_id=audit_id)
+        )
+
+    def get_start_date(self) -> date | None:
+        if self._start_date is not None:
+            return self._start_date
+        raw = self.request.GET.get(self.start_param, "").strip()
+        self._start_date = parse_date(raw)
+        return self._start_date
+
+    def get_end_date(self) -> date | None:
+        if self._end_date is not None:
+            return self._end_date
+        raw = self.request.GET.get(self.end_param, "").strip()
+        self._end_date = parse_date(raw)
+        return self._end_date
+
+    def get_audit_filter(self) -> int | None:
+        if self._audit_filter is not None:
+            return self._audit_filter
+        raw = self.request.GET.get(self.audit_param, "").strip()
+        if not raw:
+            self._audit_filter = None
+            return None
+        try:
+            self._audit_filter = int(raw)
+        except (TypeError, ValueError):
+            self._audit_filter = None
+        return self._audit_filter
+
+    def get_entity_type_filter(self) -> str:
+        if self._entity_type_filter is not None:
+            return self._entity_type_filter
+        raw = self.request.GET.get(self.entity_type_param, "").strip()
+        if raw in self.ENTITY_TYPE_LABELS:
+            self._entity_type_filter = raw
+        else:
+            self._entity_type_filter = ""
+        return self._entity_type_filter
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        entries = self._collect_entries(context)
+        audit_map = self._prepare_audit_map(entries)
+        for entry in entries:
+            audit_obj = audit_map.get(getattr(entry, "related_audit_id", None))
+            if audit_obj is not None:
+                setattr(entry, "related_audit", audit_obj)
+            setattr(entry, "entity_label", self.ENTITY_TYPE_LABELS.get(entry.entity_type, entry.entity_type))
+            setattr(entry, "payload_pretty", self._format_payload(entry.payload))
+
+        context.update(
+            {
+                "start_value": self._format_date(self.get_start_date()),
+                "end_value": self._format_date(self.get_end_date()),
+                "audit_value": self.get_audit_filter() or "",
+                "entity_type_choices": self._build_entity_type_choices(),
+                "entity_type_value": self.get_entity_type_filter(),
+                "querystring": self.get_preserved_querystring(),
+                "start_param": self.start_param,
+                "end_param": self.end_param,
+                "audit_param": self.audit_param,
+                "entity_type_param": self.entity_type_param,
+            }
+        )
+        return context
+
+    def _collect_entries(self, context: dict[str, object]) -> list[AuditLogEntry]:
+        page_obj = context.get("page_obj")
+        if hasattr(page_obj, "object_list"):
+            return list(getattr(page_obj, "object_list"))
+        entries = context.get(self.context_object_name)
+        if isinstance(entries, list):
+            return entries
+        return list(entries or [])
+
+    def _prepare_audit_map(
+        self, entries: Iterable[AuditLogEntry]
+    ) -> dict[int, Audit]:
+        audit_ids = {
+            int(audit_id)
+            for audit_id in (
+                getattr(entry, "related_audit_id", None) for entry in entries
+            )
+            if audit_id
+        }
+        if not audit_ids:
+            return {}
+        audits = (
+            Audit.objects.filter(pk__in=audit_ids)
+            .select_related("elevator", "elevator__building")
+        )
+        return {audit.pk: audit for audit in audits}
+
+    def _build_entity_type_choices(self) -> list[tuple[str, str]]:
+        choices = [("", _("Все объекты"))]
+        for key, label in sorted(self.ENTITY_TYPE_LABELS.items(), key=lambda item: item[1]):
+            choices.append((key, label))
+        return choices
+
+    @staticmethod
+    def _format_date(value: date | None) -> str:
+        return value.isoformat() if value else ""
+
+    @staticmethod
+    def _format_payload(payload: object) -> str:
+        try:
+            return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        except TypeError:
+            return str(payload)
+
+    def get_preserved_querystring(self) -> str:
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        params.pop("export", None)
+        non_empty = {key: value for key, value in params.items() if value}
+        return urlencode(non_empty)
+
+    def _export_csv(self, queryset: QuerySet[AuditLogEntry]) -> HttpResponse:
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="audit-log.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["created_at", "action", "entity", "user", "payload"])
+        for entry in queryset.iterator():
+            writer.writerow(
+                [
+                    timezone.localtime(entry.created_at).strftime("%Y-%m-%d %H:%M:%S"),
+                    entry.get_action_display(),
+                    f"{entry.entity_type}:{entry.entity_id}",
+                    getattr(entry.user, "get_username", lambda: "")(),
+                    json.dumps(entry.payload, ensure_ascii=False, sort_keys=True),
+                ]
+            )
+        return response
+
+
+class OfflineSyncBatchListView(RoleRequiredMixin, ListView):
+    """Monitoring page for offline synchronisation batches."""
+
+    model = OfflineSyncBatch
+    template_name = "audits/offline_batch_list.html"
+    context_object_name = "batches"
+    paginate_by = 25
+    ordering = "-created_at"
+    allowed_roles = (UserProfile.Roles.ADMIN,)
+
+    start_param = "start"
+    end_param = "end"
+    status_param = "status"
+    device_param = "device"
+
+    _start_date: date | None = None
+    _end_date: date | None = None
+    _status_filter: str | None = None
+    _device_filter: str | None = None
+
+    def get(self, request, *args, **kwargs):  # type: ignore[override]
+        if request.GET.get("export") == "csv":
+            queryset = self.get_filtered_queryset()
+            return self._export_csv(queryset)
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self) -> QuerySet[OfflineSyncBatch]:  # type: ignore[override]
+        return self.get_filtered_queryset()
+
+    def get_filtered_queryset(self) -> QuerySet[OfflineSyncBatch]:
+        queryset = super().get_queryset().select_related("user")
+        queryset = self._filter_by_dates(queryset)
+        queryset = self._filter_by_status(queryset)
+        queryset = self._filter_by_device(queryset)
+        return queryset.order_by(self.ordering)
+
+    def _filter_by_dates(
+        self, queryset: QuerySet[OfflineSyncBatch]
+    ) -> QuerySet[OfflineSyncBatch]:
+        start_date = self.get_start_date()
+        if start_date:
+            start_dt = timezone.make_aware(
+                datetime.combine(start_date, time.min),
+                timezone.get_current_timezone(),
+            )
+            queryset = queryset.filter(created_at__gte=start_dt)
+
+        end_date = self.get_end_date()
+        if end_date:
+            exclusive_end = end_date + timedelta(days=1)
+            end_dt = timezone.make_aware(
+                datetime.combine(exclusive_end, time.min),
+                timezone.get_current_timezone(),
+            )
+            queryset = queryset.filter(created_at__lt=end_dt)
+        return queryset
+
+    def _filter_by_status(
+        self, queryset: QuerySet[OfflineSyncBatch]
+    ) -> QuerySet[OfflineSyncBatch]:
+        status_value = self.get_status_filter()
+        valid_values = {value for value, _ in OfflineSyncBatch.Status.choices}
+        if status_value and status_value in valid_values:
+            queryset = queryset.filter(status=status_value)
+        return queryset
+
+    def _filter_by_device(
+        self, queryset: QuerySet[OfflineSyncBatch]
+    ) -> QuerySet[OfflineSyncBatch]:
+        device_value = self.get_device_filter()
+        if device_value:
+            queryset = queryset.filter(device_id__icontains=device_value)
+        return queryset
+
+    def get_start_date(self) -> date | None:
+        if self._start_date is not None:
+            return self._start_date
+        raw = self.request.GET.get(self.start_param, "").strip()
+        self._start_date = parse_date(raw)
+        return self._start_date
+
+    def get_end_date(self) -> date | None:
+        if self._end_date is not None:
+            return self._end_date
+        raw = self.request.GET.get(self.end_param, "").strip()
+        self._end_date = parse_date(raw)
+        return self._end_date
+
+    def get_status_filter(self) -> str:
+        if self._status_filter is not None:
+            return self._status_filter
+        self._status_filter = self.request.GET.get(self.status_param, "").strip()
+        return self._status_filter
+
+    def get_device_filter(self) -> str:
+        if self._device_filter is not None:
+            return self._device_filter
+        self._device_filter = self.request.GET.get(self.device_param, "").strip()
+        return self._device_filter
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {
+                "start_value": self._format_date(self.get_start_date()),
+                "end_value": self._format_date(self.get_end_date()),
+                "status_value": self.get_status_filter(),
+                "status_choices": self._build_status_choices(),
+                "device_value": self.get_device_filter(),
+                "querystring": self.get_preserved_querystring(),
+                "notification_choices": OfflineSyncBatch.NotificationStatus.choices,
+                "status_summary": self._build_status_summary(),
+                "start_param": self.start_param,
+                "end_param": self.end_param,
+                "status_param": self.status_param,
+                "device_param": self.device_param,
+            }
+        )
+        for batch in self._collect_batches(context):
+            setattr(batch, "error_details_pretty", self._format_payload(batch.error_details))
+        return context
+
+    def _build_status_choices(self) -> list[tuple[str, str]]:
+        choices = [("", _("Все статусы"))]
+        choices.extend(OfflineSyncBatch.Status.choices)
+        return choices
+
+    def _build_status_summary(self) -> dict[str, int]:
+        base_queryset = OfflineSyncBatch.objects.all()
+        return {
+            "total": base_queryset.count(),
+            OfflineSyncBatch.Status.PENDING: base_queryset.filter(
+                status=OfflineSyncBatch.Status.PENDING
+            ).count(),
+            OfflineSyncBatch.Status.APPLIED: base_queryset.filter(
+                status=OfflineSyncBatch.Status.APPLIED
+            ).count(),
+            OfflineSyncBatch.Status.ERROR: base_queryset.filter(
+                status=OfflineSyncBatch.Status.ERROR
+            ).count(),
+        }
+
+    @staticmethod
+    def _format_date(value: date | None) -> str:
+        return value.isoformat() if value else ""
+
+    @staticmethod
+    def _format_payload(payload: object) -> str:
+        try:
+            return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        except TypeError:
+            return str(payload)
+
+    def _collect_batches(self, context: dict[str, object]) -> list[OfflineSyncBatch]:
+        page_obj = context.get("page_obj")
+        if hasattr(page_obj, "object_list"):
+            return list(getattr(page_obj, "object_list"))
+        batches = context.get(self.context_object_name)
+        if isinstance(batches, list):
+            return batches
+        return list(batches or [])
+
+    def get_preserved_querystring(self) -> str:
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        params.pop("export", None)
+        non_empty = {key: value for key, value in params.items() if value}
+        return urlencode(non_empty)
+
+    def _export_csv(self, queryset: QuerySet[OfflineSyncBatch]) -> HttpResponse:
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="offline-batches.csv"'
+        writer = csv.writer(response)
+        writer.writerow(
+            [
+                "created_at",
+                "device_id",
+                "status",
+                "user",
+                "response_status",
+                "notification_status",
+                "notified_at",
+                "error_details",
+            ]
+        )
+        for batch in queryset.iterator():
+            writer.writerow(
+                [
+                    timezone.localtime(batch.created_at).strftime("%Y-%m-%d %H:%M:%S"),
+                    batch.device_id,
+                    batch.get_status_display(),
+                    getattr(batch.user, "get_username", lambda: "")(),
+                    batch.response_status,
+                    batch.get_error_notification_status_display(),
+                    batch.error_notified_at.isoformat()
+                    if batch.error_notified_at
+                    else "",
+                    json.dumps(batch.error_details, ensure_ascii=False, sort_keys=True),
+                ]
+            )
+        return response
+
 __all__ = [
     "AuditListView",
     "AttachmentDownloadView",
     "AuditCSVExportView",
     "AuditExcelExportView",
+    "AuditLogEntryListView",
     "AuditPrintView",
     "OfflineChecklistView",
+    "OfflineSyncBatchListView",
     "OfflineObjectInfoView",
 ]

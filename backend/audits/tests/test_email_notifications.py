@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from unittest import mock
+
 from django.core import mail
 from django.test import TestCase
 
@@ -94,3 +96,27 @@ class AuditEmailNotificationsTests(TestCase):
         self.assertIn("ошибка офлайн-синхронизации", message.subject.lower())
         self.assertEqual(message.recipients(), ["admin@example.com"])
         self.assertIn("Размер вложения", message.body)
+
+        batch.refresh_from_db()
+        self.assertEqual(
+            batch.error_notification_status,
+            OfflineSyncBatch.NotificationStatus.SENT,
+        )
+        self.assertIsNotNone(batch.error_notified_at)
+
+    def test_offline_sync_error_without_recipients_marked_skipped(self) -> None:
+        batch = OfflineSyncBatch.objects.create(
+            user=self.auditor,
+            device_id="device-1",
+            payload={"kind": "data"},
+        )
+
+        with mock.patch("audits.emails.get_active_admin_emails", return_value=[]):
+            batch.mark_error({"detail": "Ошибка"}, status=400)
+
+        batch.refresh_from_db()
+        self.assertEqual(
+            batch.error_notification_status,
+            OfflineSyncBatch.NotificationStatus.SKIPPED,
+        )
+        self.assertIsNone(batch.error_notified_at)

@@ -7,11 +7,13 @@ from .views import (
     AttachmentDownloadView,
     AuditCSVExportView,
     AuditDetailView,
+    AuditLogEntryListView,
     AuditExcelExportView,
     AuditListView,
     AuditMarkReviewedView,
     AuditPrintView,
     AuditRequestChangesView,
+    OfflineSyncBatchListView,
     OfflineChecklistView,
     OfflineObjectInfoView,
 )
@@ -20,6 +22,12 @@ app_name = "audits"
 
 urlpatterns = [
     path("", AuditListView.as_view(), name="audit-list"),
+    path("logs/", AuditLogEntryListView.as_view(), name="audit-log-list"),
+    path(
+        "offline/batches/",
+        OfflineSyncBatchListView.as_view(),
+        name="offline-batch-list",
+    ),
     path(
         "offline/object-info/",
         OfflineObjectInfoView.as_view(),
