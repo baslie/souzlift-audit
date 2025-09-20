@@ -77,34 +77,63 @@
 
 ### 2.2. Скрипт резервного копирования
 
-Создайте скрипт `scripts/backup.sh` (будет реализован на этапе T9.2) со следующей логикой:
+В репозитории реализован скрипт `scripts/backup.sh`, автоматизирующий резервное копирование базы данных и каталога медиа. По умолчанию он:
+
+- определяет каталог проекта относительно расположения скрипта;
+- создаёт каталоги бэкапов вида `<BACKUP_ROOT>/<YYYYMMDD-HHMMSS>/` и символическую ссылку `latest` на свежий архив;
+- выполняет согласованное копирование SQLite-файла (через `sqlite3 .backup`, а при его отсутствии — через стандартную библиотеку Python или `cp`);
+- синхронизирует каталог медиа (`rsync -a --delete` с резервным вариантом на `tar`);
+- записывает файл `manifest.json` с параметрами создания и размерами копий;
+- удаляет каталоги старше `RETENTION_DAYS` (по умолчанию 30 суток).
+
+Переменные окружения позволяют адаптировать сценарий под инфраструктуру заказчика:
+
+| Переменная | Назначение | Значение по умолчанию |
+|------------|------------|-----------------------|
+| `PROJECT_ROOT` | Корневой каталог проекта | `<script_dir>/..` |
+| `BACKUP_ROOT` | Папка хранения бэкапов | `$PROJECT_ROOT/backups` |
+| `DB_PATH` | Путь к файлу SQLite | `$PROJECT_ROOT/backend/db/db.sqlite3` |
+| `MEDIA_PATH` | Каталог с медиафайлами | `$PROJECT_ROOT/backend/media` |
+| `RETENTION_DAYS` | Срок хранения копий в сутках | `30` |
+| `SQLITE3_BIN` | Путь к бинарю `sqlite3` | `sqlite3` (из `$PATH`) |
+| `PYTHON_BIN` | Интерпретатор Python для резервного варианта | `python3` |
+
+Пример запуска на продакшене:
 
 ```bash
-#!/bin/bash
-set -euo pipefail
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP_ROOT="/var/backups/souzlift"
-PROJECT_ROOT="/opt/souzlift"
-DB_PATH="$PROJECT_ROOT/backend/db.sqlite3"
-MEDIA_PATH="$PROJECT_ROOT/backend/media"
-TARGET_DIR="$BACKUP_ROOT/$TIMESTAMP"
-
-mkdir -p "$TARGET_DIR"
-cp "$DB_PATH" "$TARGET_DIR/db.sqlite3"
-rsync -a "$MEDIA_PATH/" "$TARGET_DIR/media/"
-find "$BACKUP_ROOT" -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \;
+BACKUP_ROOT=/var/backups/souzlift \
+PROJECT_ROOT=/opt/souzlift \
+RETENTION_DAYS=60 \
+/opt/souzlift/scripts/backup.sh
 ```
 
-Инструкции по установке:
+### 2.3. Настройка cron-задачи
 
-1. Разместить скрипт в каталоге `scripts/` и выдать права на исполнение: `chmod +x scripts/backup.sh`.
-2. Настроить cron-задачу от пользователя, владеющего приложением:
-   ```bash
-   0 2 * * * /opt/souzlift/scripts/backup.sh >> /var/log/souzlift/backup.log 2>&1
-   ```
-3. Периодически проверять целостность бэкапов: раз в месяц разворачивать тестовую копию базы в изолированной среде и открывать несколько аудитов.
+Скрипт `scripts/install_backup_cron.sh` помогает установить ежедневный запуск резервного копирования. Он обновляет персональный `crontab`, устраняя дубликаты существующих записей и при необходимости создаёт каталог логов.
 
-### 2.3. Восстановление из резервной копии
+Доступные параметры:
+
+| Переменная | Назначение | Значение по умолчанию |
+|------------|------------|-----------------------|
+| `BACKUP_SCRIPT` | Путь до исполняемого `backup.sh` | `<script_dir>/backup.sh` |
+| `SCHEDULE` | Cron-расписание | `0 2 * * *` |
+| `LOG_FILE` | Файл для логирования | `/var/log/souzlift/backup.log` |
+| `CRONTAB_BIN` | Команда управления cron | `crontab` |
+| `DRY_RUN` | Только вывести будущий crontab без применения | `false` |
+
+Пример установки ежедневного бэкапа с логами:
+
+```bash
+PROJECT_ROOT=/opt/souzlift \
+LOG_FILE=/var/log/souzlift/backup.log \
+/opt/souzlift/scripts/install_backup_cron.sh
+```
+
+Для проверки получившегося расписания запустите `DRY_RUN=true ./scripts/install_backup_cron.sh`.
+
+Не реже одного раза в месяц разворачивайте тестовую копию из свежего архива: остановите стенд, восстановите базу и медиа в изолированной среде и убедитесь, что аудиты и вложения доступны.
+
+### 2.4. Восстановление из резервной копии
 
 1. Остановить приложение (`sudo systemctl stop gunicorn`).
 2. Скопировать файл базы и каталог медиа из нужного архива в рабочую директорию.
