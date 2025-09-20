@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core import mail
 from django.http import HttpRequest
 from django.test import TestCase
 from django.test.client import RequestFactory
@@ -140,6 +141,35 @@ class QuerysetRestrictionTests(TestCase):
         queryset = UserProfile.objects.order_by("pk")
         filtered = restrict_queryset_for_user(queryset, self.auditor)
         self.assertEqual(list(filtered), [self.auditor.profile])
+
+
+class UserNotificationTests(TestCase):
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+
+    def test_email_sent_for_new_user_with_address(self) -> None:
+        mail.outbox.clear()
+
+        self.UserModel.objects.create_user(
+            username="with-email",
+            email="user@example.com",
+            password="StrongPass123!",
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertIn("учётная запись", message.subject.lower())
+        self.assertIn("with-email", message.body)
+
+    def test_email_not_sent_when_address_missing(self) -> None:
+        mail.outbox.clear()
+
+        self.UserModel.objects.create_user(
+            username="without-email",
+            password="StrongPass123!",
+        )
+
+        self.assertEqual(len(mail.outbox), 0)
 
 
 class UserAdminActionsTests(TestCase):

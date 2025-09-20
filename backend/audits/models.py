@@ -268,6 +268,12 @@ class Audit(models.Model):
         is_creation = self.pk is None
         status_changed = previous_status is not None and self.status != previous_status
 
+        # Stash transition context for signal handlers.
+        self._previous_status = previous_status
+        self._status_changed = status_changed
+        self._status_related_changes = status_related_changes
+        self._is_creation = is_creation
+
         super().save(*args, **kwargs)
 
         log_actor = _consume_log_actor(self)
@@ -1034,6 +1040,9 @@ class OfflineSyncBatch(models.Model):
                     "response_status",
                 ]
             )
+            from .emails import notify_offline_sync_error
+
+            notify_offline_sync_error(self)
 
     def __str__(self) -> str:
         status_label = self.get_status_display()
