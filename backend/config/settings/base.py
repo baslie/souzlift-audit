@@ -119,6 +119,11 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 PROTECTED_MEDIA_ROOT = BASE_DIR / "protected_media"
 AUDIT_ATTACHMENT_URL_MAX_AGE = env_int("DJANGO_AUDIT_ATTACHMENT_URL_MAX_AGE", 300)
+AUDIT_ATTACHMENT_LIMITS = {
+    "max_size_bytes": max(1, env_int("DJANGO_AUDIT_ATTACHMENT_MAX_SIZE", 8 * 1024 * 1024)),
+    "max_per_response": max(1, env_int("DJANGO_AUDIT_ATTACHMENT_MAX_PER_RESPONSE", 10)),
+    "max_per_audit": max(1, env_int("DJANGO_AUDIT_ATTACHMENT_MAX_PER_AUDIT", 100)),
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -13,7 +13,7 @@ from audits.models import (
     AuditAttachment,
     AuditResponse,
     OfflineSyncBatch,
-    MAX_ATTACHMENT_SIZE_BYTES,
+    AttachmentLimits,
 )
 from catalog.models import (
     Building,
@@ -342,7 +342,8 @@ class OfflineSyncAttachmentTests(ProtectedMediaTestCase):
             },
         }
 
-        oversized = MAX_ATTACHMENT_SIZE_BYTES + 1
+        limits = AttachmentLimits()
+        oversized = limits.max_size_bytes + 1
         big_file = SimpleUploadedFile(
             "oversized.jpg",
             b"0" * oversized,
@@ -359,7 +360,7 @@ class OfflineSyncAttachmentTests(ProtectedMediaTestCase):
         self.assertEqual(body.get("status"), "error")
         self.assertEqual(body.get("code"), "validation_error")
         self.assertIn("file", body.get("errors", {}))
-        self.assertIn("8 МБ", body["errors"]["file"][0])
+        self.assertIn(limits.max_size_label, body["errors"]["file"][0])
 
         batches = OfflineSyncBatch.objects.filter(payload__kind="attachment")
         self.assertEqual(batches.count(), 1)
@@ -368,6 +369,6 @@ class OfflineSyncAttachmentTests(ProtectedMediaTestCase):
         self.assertEqual(batch.status, OfflineSyncBatch.Status.ERROR)
         self.assertEqual(batch.response_status, 400)
         self.assertIn("file", batch.error_details)
-        self.assertIn("8 МБ", batch.error_details["file"][0])
+        self.assertIn(limits.max_size_label, batch.error_details["file"][0])
 
         self.assertEqual(AuditAttachment.objects.count(), 0)
