@@ -76,6 +76,7 @@
 
 - Основные команды:
   - `pytest` — запуск всех тестов.
+  - `pytest backend/tests/test_admin_cabinet_end_to_end.py` — end-to-end сценарии кабинета администратора, обязательные в CI-пайплайне.
   - `ruff check backend/` — статический анализ Python-кода.
   - `python manage.py check` — встроенные проверки Django.
 - Перед публикацией релиза обязательно выполняйте полный комплект тестов.
