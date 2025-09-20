@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from collections.abc import Mapping
+from functools import lru_cache
 import json
 import logging
 from typing import Any, Final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -41,6 +43,16 @@ def _attachment_limits_config() -> dict[str, int]:
         if parsed > 0:
             limits[key] = parsed
 
+    config_model = globals().get("AttachmentLimitConfiguration")
+    if config_model is not None:
+        try:
+            overrides = config_model.get_cached_overrides()
+        except Exception:  # pragma: no cover - защитный код на случай ошибок миграции
+            overrides = {}
+        for key, value in overrides.items():
+            if value and value > 0:
+                limits[key] = int(value)
+
     return limits
 
 
@@ -65,6 +77,100 @@ def _format_size_label(bytes_value: int) -> str:
     return f"{size_mb:.1f}".rstrip("0").rstrip(".")
 
 sync_logger = logging.getLogger("audits.offline_sync")
+
+
+class AttachmentLimitConfiguration(models.Model):
+    """Persisted overrides for attachment limits configurable by administrators."""
+
+    SINGLETON_KEY = "default"
+
+    key = models.CharField(
+        _("Ключ"),
+        max_length=20,
+        unique=True,
+        default=SINGLETON_KEY,
+        editable=False,
+    )
+    max_size_mb = models.PositiveIntegerField(
+        _("Максимальный размер файла (МБ)"),
+        default=DEFAULT_ATTACHMENT_LIMITS["max_size_bytes"] // (1024 * 1024),
+        validators=[MinValueValidator(1)],
+        help_text=_("Применяется к каждому вложению."),
+    )
+    max_per_response = models.PositiveIntegerField(
+        _("Файлов на ответ"),
+        default=DEFAULT_ATTACHMENT_LIMITS["max_per_response"],
+        validators=[MinValueValidator(1)],
+        help_text=_("Сколько вложений допустимо прикрепить к одному вопросу чек-листа."),
+    )
+    max_per_audit = models.PositiveIntegerField(
+        _("Файлов на аудит"),
+        default=DEFAULT_ATTACHMENT_LIMITS["max_per_audit"],
+        validators=[MinValueValidator(1)],
+        help_text=_("Совокупный лимит вложений в рамках одного аудита."),
+    )
+    updated_at = models.DateTimeField(_("Обновлено"), auto_now=True)
+
+    class Meta:
+        verbose_name = _("Настройка вложений аудита")
+        verbose_name_plural = _("Настройки вложений аудита")
+
+    def __str__(self) -> str:  # pragma: no cover - служебное отображение
+        return _("Конфигурация вложений")
+
+    @classmethod
+    def defaults(cls) -> dict[str, int]:
+        return {
+            "max_size_mb": DEFAULT_ATTACHMENT_LIMITS["max_size_bytes"] // (1024 * 1024),
+            "max_per_response": DEFAULT_ATTACHMENT_LIMITS["max_per_response"],
+            "max_per_audit": DEFAULT_ATTACHMENT_LIMITS["max_per_audit"],
+        }
+
+    @classmethod
+    def load(cls) -> "AttachmentLimitConfiguration":
+        instance, _ = cls.objects.get_or_create(
+            key=cls.SINGLETON_KEY,
+            defaults=cls.defaults(),
+        )
+        return instance
+
+    @classmethod
+    @lru_cache(maxsize=1)
+    def get_cached_overrides(cls) -> dict[str, int]:
+        try:
+            instance = cls.objects.only(
+                "max_size_mb", "max_per_response", "max_per_audit"
+            ).get(key=cls.SINGLETON_KEY)
+        except cls.DoesNotExist:
+            return {}
+        return instance.as_limits()
+
+    @classmethod
+    def update_limits(
+        cls,
+        *,
+        max_size_mb: int,
+        max_per_response: int,
+        max_per_audit: int,
+    ) -> "AttachmentLimitConfiguration":
+        instance = cls.load()
+        instance.max_size_mb = max_size_mb
+        instance.max_per_response = max_per_response
+        instance.max_per_audit = max_per_audit
+        instance.full_clean()
+        instance.save()
+        return instance
+
+    def as_limits(self) -> dict[str, int]:
+        return {
+            "max_size_bytes": int(self.max_size_mb) * 1024 * 1024,
+            "max_per_response": int(self.max_per_response),
+            "max_per_audit": int(self.max_per_audit),
+        }
+
+    def save(self, *args: object, **kwargs: object) -> None:  # pragma: no cover - обертка
+        super().save(*args, **kwargs)
+        self.__class__.get_cached_overrides.cache_clear()
 
 
 def _consume_log_actor(instance: object) -> Any | None:
