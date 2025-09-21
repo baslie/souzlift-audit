@@ -38,7 +38,8 @@ def is_auditor(user: object) -> bool:
 def role_required(*roles: str, redirect_field_name: str = "next"):
     """Декоратор, ограничивающий доступ к указанным ролям."""
 
-    allowed: frozenset[str] = frozenset(roles)
+    default_roles = frozenset(UserProfile.Roles.values)
+    allowed: frozenset[str] = frozenset(roles or default_roles)
 
     def predicate(user: object) -> bool:
         profile = _get_profile(user)
@@ -51,13 +52,16 @@ class RoleRequiredMixin(LoginRequiredMixin):
     """Базовый mixin для ограничений по ролям."""
 
     allowed_roles: Sequence[str] = ()
+    default_roles: Sequence[str] = (UserProfile.Roles.ADMIN, UserProfile.Roles.AUDITOR)
 
     @cached_property
     def profile(self) -> UserProfile | None:
         return _get_profile(self.request.user)
 
     def get_allowed_roles(self) -> Iterable[str]:
-        return self.allowed_roles
+        if self.allowed_roles:
+            return self.allowed_roles
+        return self.default_roles
 
     def has_role_permission(self) -> bool:
         profile = self.profile

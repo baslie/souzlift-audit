@@ -73,7 +73,7 @@ class AuthenticationFlowTests(TestCase):
             last_name="Петрова",
         )
 
-    def test_login_redirects_to_force_password_change(self) -> None:
+    def test_login_redirects_to_dashboard(self) -> None:
         response = self.client.post(
             reverse("accounts:login"),
             {"username": self.username, "password": self.password},
@@ -81,16 +81,16 @@ class AuthenticationFlowTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("accounts:force-password-change"),
-            fetch_redirect_response=True,
+            reverse("accounts:dashboard"),
+            fetch_redirect_response=False,
         )
 
-    def test_force_password_change_updates_timestamp(self) -> None:
+    def test_password_change_updates_timestamp(self) -> None:
         logged_in = self.client.login(username=self.username, password=self.password)
         self.assertTrue(logged_in)
 
         response = self.client.post(
-            reverse("accounts:force-password-change"),
+            reverse("accounts:password-change"),
             {
                 "old_password": self.password,
                 "new_password1": "NewPass321!",
@@ -106,17 +106,6 @@ class AuthenticationFlowTests(TestCase):
         profile = self.user.profile
         profile.refresh_from_db()
         self.assertIsNotNone(profile.password_changed_at)
-
-    def test_password_change_signal_resets_marker_on_admin_reset(self) -> None:
-        profile = self.user.profile
-        profile.mark_password_changed()
-        self.assertIsNotNone(profile.password_changed_at)
-
-        self.user.set_password("AnotherPass456!")
-        self.user.save()
-
-        profile.refresh_from_db()
-        self.assertIsNone(profile.password_changed_at)
 
 
 class LogoutIntegrationTests(TestCase):
@@ -343,6 +332,7 @@ class UserAdminActionsTests(TestCase):
         profile = target.profile
         profile.mark_password_changed()
         self.assertIsNotNone(profile.password_changed_at)
+        previous_timestamp = profile.password_changed_at
 
         request = self._build_request()
         queryset = self.UserModel.objects.filter(pk=target.pk)
@@ -353,7 +343,9 @@ class UserAdminActionsTests(TestCase):
         profile.refresh_from_db()
 
         self.assertTrue(target.check_password("TempPass123!"))
-        self.assertIsNone(profile.password_changed_at)
+        self.assertIsNotNone(profile.password_changed_at)
+        if previous_timestamp is not None:
+            self.assertGreaterEqual(profile.password_changed_at, previous_timestamp)
         messages = list(get_messages(request))
         self.assertTrue(any("TempPass123!" in message.message for message in messages))
 

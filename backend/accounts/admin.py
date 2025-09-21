@@ -160,6 +160,9 @@ class UserAdmin(DjangoUserAdmin):
             password = generate_temporary_password()
             user.set_password(password)
             user.save(update_fields=["password"])
+            profile = getattr(user, "profile", None)
+            if profile:
+                profile.mark_password_changed()
             credentials.append((user.get_username(), password))
 
         if not credentials:
