@@ -1,64 +1,13 @@
-"""URL patterns for the audits application."""
+"""URL configuration for the simplified audits module."""
 from __future__ import annotations
 
 from django.urls import path
 
-from .views import (
-    AttachmentDownloadView,
-    AuditCSVExportView,
-    AuditDetailView,
-    AuditLogEntryListView,
-    AuditExcelExportView,
-    AuditListView,
-    AuditMarkReviewedView,
-    AuditPrintView,
-    AuditRequestChangesView,
-    OfflineSyncBatchListView,
-    OfflineChecklistView,
-    OfflineObjectInfoView,
-)
+from .views import AuditDetailView, AuditListView
 
 app_name = "audits"
 
 urlpatterns = [
     path("", AuditListView.as_view(), name="audit-list"),
-    path("logs/", AuditLogEntryListView.as_view(), name="audit-log-list"),
-    path(
-        "offline/batches/",
-        OfflineSyncBatchListView.as_view(),
-        name="offline-batch-list",
-    ),
-    path(
-        "offline/object-info/",
-        OfflineObjectInfoView.as_view(),
-        name="offline-object-info",
-    ),
-    path(
-        "offline/checklist/",
-        OfflineChecklistView.as_view(),
-        name="offline-checklist",
-    ),
     path("<int:pk>/", AuditDetailView.as_view(), name="audit-detail"),
-    path("<int:pk>/review/", AuditMarkReviewedView.as_view(), name="audit-mark-reviewed"),
-    path(
-        "<int:pk>/request-changes/",
-        AuditRequestChangesView.as_view(),
-        name="audit-request-changes",
-    ),
-    path(
-        "<int:pk>/export/print/",
-        AuditPrintView.as_view(),
-        name="audit-export-print",
-    ),
-    path(
-        "<int:pk>/export/csv/",
-        AuditCSVExportView.as_view(),
-        name="audit-export-csv",
-    ),
-    path(
-        "<int:pk>/export/excel/",
-        AuditExcelExportView.as_view(),
-        name="audit-export-excel",
-    ),
-    path("attachments/<str:token>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),
 ]

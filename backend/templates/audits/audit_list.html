@@ -1,494 +1,89 @@
 {% extends "base.html" %}
-{% load static %}
-{% block title %}{% if is_admin %}Аудиты · Союзлифт Аудит{% else %}Мои аудиты · Союзлифт Аудит{% endif %}{% endblock %}
-{% block heading %}{% if is_admin %}Аудиты{% else %}Мои аудиты{% endif %}{% endblock %}
+{% block title %}Аудиты · Союзлифт Аудит{% endblock %}
+{% block heading %}Аудиты{% endblock %}
 {% block subheading %}
-  {% if is_admin %}
-    <p class="text-sm text-ink-500">
-      Управляйте аудиторскими проверками: применяйте фильтры по статусу и состоянию проверки,
-      открывайте карточку без перехода в административную панель и отмечайте записи как просмотренные.
-    </p>
-  {% else %}
-    <p class="text-sm text-ink-500">
-      Здесь отображаются завершённые и черновые проверки. Фильтруйте список по статусу или дате,
-      а при отсутствии сети создавайте черновики — они сохранятся локально и синхронизируются при подключении.
-    </p>
-  {% endif %}
-{% endblock %}
-{% block actions %}
-  {% if not is_admin %}
-    <button
-      type="button"
-      class="btn btn--primary"
-      data-portal-action="open-dialog"
-    >
-      Новый аудит (офлайн)
-    </button>
-  {% endif %}
+  <p class="text-sm text-ink-500">
+    Просматривайте назначенные проверки и переходите к карточке аудита для заполнения ответов и проверки результатов.
+  </p>
 {% endblock %}
 {% block content %}
-  <div
-    class="space-y-10"
-    {% if not is_admin %}
-      data-auditor-portal
-      data-dialog-id="offline-audit-dialog"
-      data-catalog-url="{{ catalog_snapshot_url }}"
-      data-object-info-url="{% url 'audits:offline-object-info' %}"
-      data-sync-url="{% url 'offline-sync' %}"
-    {% endif %}
-  >
-    {% if not is_admin %}
-      <div data-portal-flash class="hidden app-alert--success font-medium"></div>
-
-      <section class="space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 class="text-lg font-semibold text-ink-900">Офлайн-черновики</h2>
-            <p class="text-sm text-ink-500">
-              Черновики сохраняются в памяти устройства и доступны без подключения к интернету. После синхронизации
-              данные будут отправлены на сервер автоматически.
-            </p>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="btn btn--secondary text-xs px-3 py-1.5"
-              data-portal-action="open-dialog"
-            >
-              Создать черновик
-            </button>
-          </div>
-        </div>
-        <div
-          data-sync-panel
-          class="rounded-xl border border-border-subtle bg-surface-subtle px-4 py-3 text-sm text-ink-600"
-        >
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="space-y-1">
-              <p data-sync-status class="font-medium text-ink-700">
-                Нет данных для синхронизации.
-              </p>
-              <p data-sync-details class="hidden text-xs text-ink-500">
-                Как только появятся готовые к отправке черновики, здесь отобразится их количество.
-              </p>
-            </div>
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                data-sync-trigger
-                class="btn btn--primary text-xs px-3 py-1.5"
-              >
-                Отправить данные
-              </button>
-            </div>
-          </div>
-          <ul data-sync-errors class="mt-3 hidden list-disc space-y-1 pl-5 text-xs text-danger-600"></ul>
-        </div>
-        <div
-          id="offline-support-warning"
-          class="hidden app-alert--warning"
-        >
-          Браузер не поддерживает локальное хранилище IndexedDB. Офлайн-режим будет недоступен на этом устройстве.
-        </div>
-        <div
-          id="offline-audit-empty"
-          class="rounded-xl border border-dashed border-border bg-surface-subtle px-4 py-6 text-sm text-ink-600"
-        >
-          Офлайн-черновиков пока нет. Нажмите «Новый аудит», чтобы подготовить проверку без подключения к сети.
-        </div>
-        <div id="offline-audit-list" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></div>
-      </section>
-    {% endif %}
-
-    <section class="space-y-6">
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 class="text-lg font-semibold text-ink-900">{% if is_admin %}Все аудиты{% else %}Синхронизированные аудиты{% endif %}</h2>
-          <p class="text-sm text-ink-500">
-            {% if is_admin %}
-              Используйте фильтры, чтобы быстро находить аудиты по статусу, периоду и признаку просмотра.
-            {% else %}
-              Фильтры применяются только к данным, уже отправленным на сервер.
-            {% endif %}
-          </p>
-        </div>
-        {% if active_filters %}
-          <div class="flex flex-wrap gap-2 text-xs text-ink-600">
-            {% for item in active_filters %}
-              <span class="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-3 py-1 font-semibold">
-                {{ item.label }}:
-                <span class="font-normal">{{ item.value }}</span>
-              </span>
-            {% endfor %}
-          </div>
-        {% endif %}
-      </div>
-
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {% for item in status_filters %}
-          {% if item.value %}
-            <div class="rounded-lg border border-border-subtle bg-surface-elevated p-4 shadow-sm">
-              <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{ item.label }}</div>
-              <div class="mt-2 text-2xl font-semibold text-ink-900">{{ item.count }}</div>
-              {% if item.selected %}
-                <div class="mt-1 text-xs text-brand-600">Фильтр применён</div>
-              {% endif %}
-            </div>
+  <div class="space-y-6">
+    <div class="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-border-subtle text-sm">
+        <thead class="bg-surface-subtle text-xs font-semibold uppercase tracking-wide text-ink-500">
+          <tr>
+            <th class="px-4 py-3 text-left">Здание</th>
+            <th class="px-4 py-3 text-left">Лифт</th>
+            <th class="px-4 py-3 text-left">Чек-лист</th>
+            <th class="px-4 py-3 text-left">Статус</th>
+            <th class="px-4 py-3 text-left">Исполнитель</th>
+            <th class="px-4 py-3 text-left">Дедлайн</th>
+            <th class="px-4 py-3 text-left">Баллы</th>
+            <th class="px-4 py-3 text-right">Действия</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border-subtle text-ink-700">
+          {% for audit in audits %}
+            <tr class="hover:bg-surface-subtle/60">
+              <td class="px-4 py-3 align-top">
+                <div class="font-medium">{{ audit.building.address }}</div>
+                {% if audit.building.entrance %}
+                  <div class="text-xs text-ink-500">Подъезд {{ audit.building.entrance }}</div>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 align-top">
+                <div class="font-medium">{{ audit.elevator.identifier }}</div>
+                <div class="text-xs text-ink-500">{{ audit.elevator.get_status_display }}</div>
+              </td>
+              <td class="px-4 py-3 align-top">{{ audit.template.name }}</td>
+              <td class="px-4 py-3 align-top">
+                <span class="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold">
+                  {{ audit.get_status_display }}
+                </span>
+              </td>
+              <td class="px-4 py-3 align-top">
+                {% if audit.assigned_to %}
+                  {{ audit.assigned_to.get_full_name|default:audit.assigned_to.username }}
+                {% else %}
+                  <span class="text-xs text-ink-400">Не назначено</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 align-top">
+                {% if audit.deadline %}
+                  {{ audit.deadline|date:"d.m.Y" }}
+                {% else %}
+                  <span class="text-xs text-ink-400">—</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 align-top">{{ audit.score }}</td>
+              <td class="px-4 py-3 text-right align-top">
+                <a href="{% url 'audits:audit-detail' audit.pk %}" class="btn btn--secondary text-xs">Открыть</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="px-4 py-6 text-center text-sm text-ink-500">
+                Аудиты пока не созданы.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if is_paginated %}
+      <div class="flex items-center justify-between text-xs text-ink-500">
+        <span>
+          Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}
+        </span>
+        <div class="flex items-center gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}" class="btn btn--secondary text-xs">Назад</a>
           {% endif %}
-        {% endfor %}
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}" class="btn btn--secondary text-xs">Вперёд</a>
+          {% endif %}
+        </div>
       </div>
-
-      <form
-        method="get"
-        class="grid gap-4 {% if review_filters %}md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]{% else %}md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]{% endif %} md:items-end"
-      >
-        <div>
-          <label for="id-search" class="form-label text-xs uppercase tracking-wide text-ink-500">Поиск</label>
-          <input
-            type="search"
-            id="id-search"
-            name="{{ search_param }}"
-            value="{{ search_query }}"
-            placeholder="Адрес здания или идентификатор лифта"
-            class="app-input"
-          />
-        </div>
-        <div>
-          <label for="id-status" class="form-label text-xs uppercase tracking-wide text-ink-500">Статус</label>
-          <select
-            id="id-status"
-            name="{{ status_param }}"
-            class="app-input app-input--select"
-          >
-            {% for item in status_filters %}
-              <option value="{{ item.value }}" {% if item.selected %}selected{% endif %}>
-                {{ item.label }}{% if item.value %} ({{ item.count }}){% endif %}
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label for="id-period" class="form-label text-xs uppercase tracking-wide text-ink-500">Период</label>
-          <select
-            id="id-period"
-            name="{{ period_param }}"
-            class="app-input app-input--select"
-          >
-            {% for item in period_filters %}
-              <option value="{{ item.value }}" {% if item.selected %}selected{% endif %}>{{ item.label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        {% if review_filters %}
-          <div>
-            <label for="id-review" class="form-label text-xs uppercase tracking-wide text-ink-500">Проверка</label>
-            <select
-              id="id-review"
-              name="{{ review_param }}"
-              class="app-input app-input--select"
-            >
-              {% for item in review_filters %}
-                <option value="{{ item.value }}" {% if item.selected %}selected{% endif %}>{{ item.label }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        {% endif %}
-        <div class="flex gap-2">
-          <button
-            type="submit"
-            class="btn btn--primary"
-          >
-            Применить
-          </button>
-          <a
-            href="{% url 'audits:audit-list' %}"
-            class="btn btn--secondary"
-          >
-            Сбросить
-          </a>
-        </div>
-      </form>
-
-      {% if audits.object_list %}
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-border-subtle text-sm">
-            <thead class="bg-surface-subtle text-xs uppercase tracking-wide text-ink-500">
-              <tr>
-                <th scope="col" class="px-4 py-3 text-left font-semibold">Объект</th>
-                <th scope="col" class="px-4 py-3 text-left font-semibold">Статус</th>
-                <th scope="col" class="px-4 py-3 text-left font-semibold">Баллы</th>
-                <th scope="col" class="px-4 py-3 text-left font-semibold">Создан</th>
-                {% if is_admin %}
-                  <th scope="col" class="px-4 py-3 text-left font-semibold">Действия</th>
-                {% endif %}
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle bg-surface-elevated">
-              {% for audit in audits.object_list %}
-              <tr class="align-top">
-                <td class="px-4 py-4">
-                  <div class="font-semibold text-ink-900">{{ audit.elevator.building.address }}</div>
-                  <div class="text-xs text-ink-500">Лифт: {{ audit.elevator.identifier }}</div>
-                  {% if audit.planned_date %}
-                    <div class="mt-1 text-xs text-ink-400">Плановая дата: {{ audit.planned_date|date:"d.m.Y" }}</div>
-                  {% endif %}
-                </td>
-                <td class="px-4 py-4">
-                  {% with classes=audit.badge_class|default:default_status_badge_class %}
-                    <span class="inline-flex rounded-full border px-3 py-1 text-xs font-semibold {{ classes }}">
-                      {{ audit.get_status_display }}
-                    </span>
-                  {% endwith %}
-                  {% if audit.finished_at %}
-                    <div class="mt-2 text-xs text-ink-500">Завершено {{ audit.finished_at|date:"d.m.Y H:i" }}</div>
-                  {% elif audit.started_at %}
-                    <div class="mt-2 text-xs text-ink-500">Начато {{ audit.started_at|date:"d.m.Y H:i" }}</div>
-                  {% endif %}
-                  {% if is_admin %}
-                    {% if audit.status == AuditStatus.SUBMITTED %}
-                      <div class="mt-2 text-xs font-medium text-warning-600">Ожидает просмотра администратором</div>
-                    {% elif audit.status == AuditStatus.REVIEWED %}
-                      <div class="mt-2 text-xs font-medium text-success-600">Просмотрено администратором</div>
-                    {% endif %}
-                  {% endif %}
-                </td>
-                <td class="px-4 py-4">
-                  <div class="text-base font-semibold text-ink-900">{{ audit.total_score }}</div>
-                  <div class="text-xs text-ink-500">Обновлено {{ audit.updated_at|date:"d.m.Y H:i" }}</div>
-                </td>
-                <td class="px-4 py-4 text-xs text-ink-500">
-                  Создан {{ audit.created_at|date:"d.m.Y H:i" }}<br />
-                  Автор: {{ audit.created_by.profile.full_name|default:audit.created_by.username }}
-                </td>
-                {% if is_admin %}
-                  <td class="px-4 py-4">
-                    <div class="flex flex-col gap-2">
-                      <a
-                        href="{% url 'audits:audit-detail' audit.pk %}?next={{ request.get_full_path|urlencode }}"
-                        class="btn btn--secondary"
-                      >
-                        Просмотр
-                      </a>
-                      <div class="flex flex-wrap gap-2 text-xs">
-                        <a
-                          href="{% url 'audits:audit-export-print' audit.pk %}"
-                          class="btn btn--ghost text-xs"
-                          target="_blank"
-                          rel="noopener"
-                        >
-                          Печать
-                        </a>
-                        <a
-                          href="{% url 'audits:audit-export-csv' audit.pk %}"
-                          class="btn btn--ghost text-xs"
-                          target="_blank"
-                          rel="noopener"
-                        >
-                          CSV
-                        </a>
-                        <a
-                          href="{% url 'audits:audit-export-excel' audit.pk %}"
-                          class="btn btn--ghost text-xs"
-                          target="_blank"
-                          rel="noopener"
-                        >
-                          Excel
-                        </a>
-                      </div>
-                      {% if audit.status == AuditStatus.SUBMITTED %}
-                        <form method="post" action="{% url 'audits:audit-mark-reviewed' audit.pk %}">
-                          {% csrf_token %}
-                          <input type="hidden" name="next" value="{{ request.get_full_path }}" />
-                          <button type="submit" class="btn btn--primary w-full">Отметить просмотр</button>
-                        </form>
-                      {% endif %}
-                    </div>
-                  </td>
-                {% endif %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-        <div class="rounded-xl border border-border-subtle bg-surface-elevated px-6 py-8 text-center text-sm text-ink-600 shadow-soft">
-          По заданным условиям аудиты не найдены. Попробуйте изменить фильтры или сбросьте их.
-        </div>
-      {% endif %}
-
-      {% if is_paginated %}
-        <div class="mt-6 flex items-center justify-between text-xs text-ink-600">
-          <span>Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
-          <div class="flex items-center gap-2">
-            {% if page_obj.has_previous %}
-              <a
-                href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
-                class="btn btn--secondary text-xs px-3 py-1"
-              >
-                Назад
-              </a>
-            {% else %}
-              <span class="rounded border border-border-subtle px-3 py-1 text-ink-300">Назад</span>
-            {% endif %}
-            {% if page_obj.has_next %}
-              <a
-                href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
-                class="btn btn--secondary text-xs px-3 py-1"
-              >
-                Вперёд
-              </a>
-            {% else %}
-              <span class="rounded border border-border-subtle px-3 py-1 text-ink-300">Вперёд</span>
-            {% endif %}
-          </div>
-        </div>
-      {% endif %}
-    </section>
-
-    {% if not is_admin %}
-      <dialog
-        id="offline-audit-dialog"
-        class="w-full max-w-xl rounded-2xl bg-surface-elevated p-0 shadow-2xl"
-        aria-labelledby="offline-audit-dialog-title"
-      >
-        <form data-offline-form class="space-y-0">
-          <div class="border-b border-border-subtle px-6 py-4">
-            <h2 id="offline-audit-dialog-title" class="text-lg font-semibold text-ink-900">Новый офлайн-аудит</h2>
-            <p class="mt-1 text-sm text-ink-500">
-              Укажите минимальные сведения, чтобы подготовить черновик. Подробное заполнение чек-листа будет доступно после
-              настройки соответствующих форм.
-            </p>
-          </div>
-          <div class="space-y-4 px-6 py-6">
-            <div>
-              <label for="id-offline-building" class="form-label text-xs uppercase tracking-wide text-ink-500"
-                >Адрес или объект</label
-              >
-              <input
-                type="text"
-                id="id-offline-building"
-                name="building"
-                class="app-input"
-                placeholder="Например, Советская 12"
-                autocomplete="off"
-              />
-            </div>
-            <div>
-              <label for="id-offline-elevator" class="form-label text-xs uppercase tracking-wide text-ink-500"
-                >Лифт или идентификатор</label
-              >
-              <input
-                type="text"
-                id="id-offline-elevator"
-                name="elevator"
-                class="app-input"
-                placeholder="Например, Лифт №3"
-                autocomplete="off"
-              />
-            </div>
-            <div>
-              <label for="id-offline-date" class="form-label text-xs uppercase tracking-wide text-ink-500"
-                >Плановая дата</label
-              >
-              <input
-                type="date"
-                id="id-offline-date"
-                name="planned_date"
-                class="app-input"
-              />
-            </div>
-            <div>
-              <label for="id-offline-note" class="form-label text-xs uppercase tracking-wide text-ink-500"
-                >Примечание</label
-              >
-              <textarea
-                id="id-offline-note"
-                name="note"
-                rows="3"
-                class="app-input app-input--textarea"
-                placeholder="Дополнительные сведения для себя"
-              ></textarea>
-            </div>
-            <div
-              data-offline-error
-              class="hidden app-alert--danger"
-            ></div>
-          </div>
-          <div class="flex items-center justify-end gap-3 border-t border-border-subtle px-6 py-4">
-            <button
-              type="button"
-              class="btn btn--secondary"
-              data-portal-action="close-dialog"
-            >
-              Отмена
-            </button>
-            <button
-              type="submit"
-              class="btn btn--primary"
-            >
-              Сохранить черновик
-            </button>
-          </div>
-        </form>
-      </dialog>
-
-      <template id="offline-audit-template">
-        <article class="flex h-full flex-col justify-between rounded-lg border border-border-subtle bg-surface-elevated p-4 shadow-sm">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-xs font-semibold uppercase tracking-wide text-ink-500">Черновик</div>
-              <h3 class="mt-1 text-lg font-semibold text-ink-900" data-field="title">Новый аудит</h3>
-            </div>
-            <span
-              class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"
-              data-field="sync-state"
-            >
-              Ожидает синхронизации
-            </span>
-          </div>
-          <dl class="mt-4 space-y-2 text-xs text-ink-500">
-            <div>
-              <dt class="font-semibold text-ink-600">Объект</dt>
-              <dd data-field="building">—</dd>
-            </div>
-            <div>
-              <dt class="font-semibold text-ink-600">Лифт</dt>
-              <dd data-field="elevator">—</dd>
-            </div>
-            <div>
-              <dt class="font-semibold text-ink-600">Плановая дата</dt>
-              <dd data-field="planned-date">—</dd>
-            </div>
-            <div>
-              <dt class="font-semibold text-ink-600">Обновлено</dt>
-              <dd data-field="updated">—</dd>
-            </div>
-          </dl>
-          <p data-field="sync-error" class="mt-3 hidden text-xs text-danger-600"></p>
-          <div class="mt-4 flex flex-wrap gap-2 text-xs">
-            <button
-              type="button"
-              class="btn btn--secondary flex-1 text-xs px-3 py-1.5"
-              data-action="open"
-            >
-              Открыть
-            </button>
-            <button
-              type="button"
-              class="btn btn--danger flex-1 text-xs px-3 py-1.5"
-              data-action="delete"
-            >
-              Удалить
-            </button>
-          </div>
-        </article>
-      </template>
     {% endif %}
   </div>
-{% endblock %}
-{% block extra_js %}
-  {% if not is_admin %}
-    <script src="{% static 'js/offline-storage.js' %}" defer></script>
-    <script src="{% static 'js/auditor-portal.js' %}" defer></script>
-  {% endif %}
 {% endblock %}

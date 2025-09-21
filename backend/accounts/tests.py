@@ -419,7 +419,7 @@ class NavigationRenderingTests(TestCase):
 
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "Кабинет администратора")
-        self.assertContains(response, reverse("catalog:checklist-overview"))
+        self.assertContains(response, reverse("checklists:template-list"))
         self.assertNotContains(response, reverse("admin:index"))
 
     def test_auditor_navigation_contains_only_auditor_links(self) -> None:
@@ -436,7 +436,7 @@ class NavigationRenderingTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "Кабинет аудитора")
         self.assertContains(response, reverse("audits:audit-list"))
-        self.assertNotContains(response, reverse("catalog:checklist-overview"))
+        self.assertContains(response, reverse("checklists:template-list"))
         self.assertNotContains(response, reverse("admin:index"))
 
     def test_superuser_sees_django_admin_link(self) -> None:

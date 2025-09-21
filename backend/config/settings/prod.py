@@ -46,9 +46,4 @@ X_FRAME_OPTIONS = "DENY"
 # Logging configuration with rotating file handlers for production deployments.
 LOGGING["loggers"]["django"]["handlers"] = ["console", "app_file"]
 LOGGING["loggers"]["django.request"]["handlers"] = ["console", "app_file"]
-LOGGING["loggers"]["audits.offline_sync"]["handlers"] = [
-    "console",
-    "app_file",
-    "offline_sync_file",
-]
 LOGGING["root"]["handlers"] = ["console", "app_file"]
