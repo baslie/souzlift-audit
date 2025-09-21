@@ -123,4 +123,3 @@ def test_attachment_rejects_response_from_another_audit(audit_factory) -> None:
             attachment.full_clean()
 
     assert "ответу текущего аудита" in str(exc.value)
-
