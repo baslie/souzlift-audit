@@ -98,3 +98,28 @@ def test_attachment_allows_audit_level_files_without_response() -> None:
         attachment = AuditAttachment(audit=audit, response=None, file=file_obj)
         attachment.full_clean()
 
+
+@pytest.mark.django_db
+def test_attachment_rejects_response_from_another_audit(audit_factory) -> None:
+    primary_audit = audit_factory()
+    other_audit = audit_factory()
+    foreign_response = AuditResponseFactory(audit=other_audit)
+    file_obj = SimpleUploadedFile("foreign.txt", b"data")
+
+    with override_settings(
+        AUDIT_ATTACHMENT_LIMITS={
+            "max_size_bytes": 1024 * 1024,
+            "max_per_response": 5,
+            "max_per_audit": 5,
+        }
+    ):
+        attachment = AuditAttachment(
+            audit=primary_audit,
+            response=foreign_response,
+            file=file_obj,
+        )
+
+        with pytest.raises(ValidationError) as exc:
+            attachment.full_clean()
+
+    assert "ответу текущего аудита" in str(exc.value)
