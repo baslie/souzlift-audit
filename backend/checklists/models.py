@@ -1,13 +1,39 @@
 """Domain models for checklist templates and their items."""
 from __future__ import annotations
 
-from decimal import Decimal
-from typing import Any
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+import re
+from typing import Any, Iterable
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+
+
+@dataclass(frozen=True)
+class ChecklistOptionDefinition:
+    """Structured description of a checklist option."""
+
+    value: Decimal | None
+    label: str
+
+    def serialized(self) -> dict[str, str]:
+        """Return representation that can be stored in JSONField."""
+
+        payload = {"label": self.label}
+        if self.value is not None:
+            payload["value"] = _decimal_to_string(self.value)
+        return payload
+
+    @property
+    def display_label(self) -> str:
+        """Format option for human-friendly display."""
+
+        if self.value is None:
+            return self.label
+        return f"{_decimal_to_string(self.value)} — {self.label}"
 
 
 class ChecklistTemplate(models.Model):
@@ -220,27 +246,65 @@ class ChecklistItem(models.Model):
                     _("Для числовой шкалы необходимо указать положительный шаг."),
                 )
         else:
-            if not self.options:
+            option_definitions = list(self.option_definitions(raw_options=self.options))
+            if not option_definitions:
                 errors.setdefault("options", []).append(
                     _("Для вопросов с вариантами необходимо задать хотя бы один вариант."),
                 )
-            if any(not isinstance(option, str) or not option.strip() for option in self.options):
-                errors.setdefault("options", []).append(
-                    _("Каждый вариант должен быть непустой строкой."),
-                )
+            else:
+                self.options = [definition.serialized() for definition in option_definitions]
         if errors:
             raise ValidationError(errors)
 
-    def normalized_options(self) -> list[str]:
-        """Return a list of option strings, trimming whitespace."""
+    def option_definitions(
+        self,
+        *,
+        raw_options: Iterable[Any] | None = None,
+    ) -> list[ChecklistOptionDefinition]:
+        """Iterate over structured options stored in JSON."""
 
         if self.score_type != self.ScoreType.OPTION:
             return []
-        normalized: list[str] = []
-        for option in self.options:
-            if isinstance(option, str):
-                normalized.append(option.strip())
+        source = raw_options if raw_options is not None else self.options
+        if isinstance(source, str):
+            iterable: Iterable[Any] = [source]
+        elif isinstance(source, Iterable):
+            iterable = source
+        else:
+            return []
+        normalized: list[ChecklistOptionDefinition] = []
+        seen: set[str] = set()
+        for entry in iterable:
+            definition = _coerce_option_definition(entry)
+            if definition is None:
+                continue
+            label_key = definition.label.strip()
+            if not label_key:
+                continue
+            if label_key in seen:
+                continue
+            seen.add(label_key)
+            normalized.append(definition)
         return normalized
+
+    def normalized_options(self) -> list[str]:
+        """Return option labels for backwards-compatible usages."""
+
+        return [definition.label for definition in self.option_definitions()]
+
+    def formatted_options(self) -> list[str]:
+        """Return display strings with scores for templates and forms."""
+
+        return [definition.display_label for definition in self.option_definitions()]
+
+    def find_option_by_label(self, label: str) -> ChecklistOptionDefinition | None:
+        """Locate option definition by stored label."""
+
+        label = label.strip()
+        for definition in self.option_definitions():
+            if definition.label == label:
+                return definition
+        return None
 
     def numeric_range(self) -> tuple[Decimal, Decimal, Decimal] | None:
         """Return numeric range definition for numeric questions."""
@@ -274,5 +338,44 @@ class ChecklistItem(models.Model):
                 }
             )
         else:
-            payload["options"] = self.normalized_options()
+            payload["options"] = [definition.serialized() for definition in self.option_definitions()]
         return payload
+
+
+def _coerce_option_definition(entry: Any) -> ChecklistOptionDefinition | None:
+    """Convert raw option entry into structured representation."""
+
+    if isinstance(entry, ChecklistOptionDefinition):
+        return entry
+    if isinstance(entry, dict):
+        label = str(entry.get("label", "")).strip()
+        if not label:
+            return None
+        raw_value = entry.get("value")
+        value = _parse_decimal_or_none(raw_value)
+        return ChecklistOptionDefinition(value=value, label=label)
+    text = str(entry or "").strip()
+    if not text:
+        return None
+    match = re.match(r"^(?P<value>-?\d+[\d.,]*)\s*[-–—:]+\s*(?P<label>.+)$", text)
+    if match:
+        value = _parse_decimal_or_none(match.group("value"))
+        label = match.group("label").strip()
+        if label:
+            return ChecklistOptionDefinition(value=value, label=label)
+    return ChecklistOptionDefinition(value=_parse_decimal_or_none(None), label=text)
+
+
+def _parse_decimal_or_none(value: Any) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    try:
+        if isinstance(value, Decimal):
+            return value
+        return Decimal(str(value).strip().replace(",", "."))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _decimal_to_string(value: Decimal) -> str:
+    return format(value.normalize(), "f")

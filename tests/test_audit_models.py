@@ -7,6 +7,31 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
 from audits.models import Audit, AuditResponse
+from checklists.models import ChecklistItem
+
+
+@pytest.mark.django_db
+def test_option_response_contributes_to_score(
+    audit_factory,
+    checklist_item_factory,
+):
+    audit = audit_factory()
+    option_item = checklist_item_factory(
+        template=audit.template,
+        order=1,
+        score_type=ChecklistItem.ScoreType.OPTION,
+        options=["0 - Не соответствует", "5 - Соответствует"],
+    )
+
+    response = AuditResponse(
+        audit=audit,
+        item=option_item,
+        selected_option="Соответствует",
+    )
+    response.save()
+
+    audit.refresh_from_db()
+    assert audit.score == Decimal("5.00")
 
 
 @pytest.mark.django_db

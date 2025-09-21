@@ -8,7 +8,6 @@ import pytest
 
 from checklists.models import ChecklistItem
 from checklists.services import (
-    ChecklistImportError,
     export_checklist_to_dataframe,
     import_checklist_from_dataframe,
     import_checklist_from_file,
@@ -39,7 +38,7 @@ def test_import_from_dataframe_creates_items(checklist_template_factory):
                 "category": "Категория 2",
                 "question": "Второй вопрос",
                 "score_type": "option",
-                "options": "Да;Нет",
+                "options": "0 - Да; 1 - Нет",
                 "requires_comment": "нет",
                 "weight": "2",
             },
@@ -59,25 +58,56 @@ def test_import_from_dataframe_creates_items(checklist_template_factory):
     assert numeric_item.weight == Decimal("1.5")
 
     assert option_item.score_type == ChecklistItem.ScoreType.OPTION
-    assert option_item.options == ["Да", "Нет"]
+    assert option_item.options == [
+        {"label": "Да", "value": "0"},
+        {"label": "Нет", "value": "1"},
+    ]
     assert option_item.requires_comment is False
     assert option_item.weight == Decimal("2")
 
 
 @pytest.mark.django_db
-def test_import_requires_comment_column(checklist_template_factory):
+def test_import_parses_options_from_help_text(checklist_template_factory):
+    template = checklist_template_factory()
+    dataframe = pd.DataFrame(
+        [
+            {
+                "question": "Доступ",
+                "help_text": "0 - затруднён · 1 - доступен",
+                "score_type": "0-1",
+            }
+        ]
+    )
+
+    import_checklist_from_dataframe(template, dataframe)
+
+    item = template.items.get()
+    assert item.score_type == ChecklistItem.ScoreType.OPTION
+    assert item.options == [
+        {"label": "затруднён", "value": "0"},
+        {"label": "доступен", "value": "1"},
+    ]
+
+
+@pytest.mark.django_db
+def test_import_defaults_requires_comment(checklist_template_factory):
     template = checklist_template_factory()
     dataframe = pd.DataFrame(
         [
             {
                 "question": "Отсутствует столбец",
+                "score_type": "numeric",
+                "min_score": "0",
+                "max_score": "1",
+                "step": "1",
             }
         ]
     )
 
-    with pytest.raises(ChecklistImportError) as exc:
-        import_checklist_from_dataframe(template, dataframe)
-    assert "requires_comment" in str(exc.value)
+    import_checklist_from_dataframe(template, dataframe)
+
+    item = template.items.get()
+    assert item.requires_comment is False
 
 
 @pytest.mark.django_db
@@ -93,7 +123,7 @@ def test_export_roundtrip_via_csv(checklist_template_factory, checklist_item_fac
         template=template,
         question="С вариантами",
         score_type=ChecklistItem.ScoreType.OPTION,
-        options=["Да", "Нет"],
+        options=["0 - Нет", "1 - Да"],
         requires_comment=False,
         order=2,
     )
@@ -132,7 +162,10 @@ def test_export_roundtrip_via_csv(checklist_template_factory, checklist_item_fac
         .first()
         .options
     )
-    assert imported_options == ["Да", "Нет"]
+    assert imported_options == [
+        {"label": "Нет", "value": "0"},
+        {"label": "Да", "value": "1"},
+    ]
 
 
 @pytest.mark.django_db
