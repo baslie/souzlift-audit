@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "accounts",
     "catalog",
+    "checklists",
     "audits",
 ]
 
@@ -163,17 +164,8 @@ def _resolve_log_path(env_var: str, default: Path) -> Path:
 
 LOG_DIR = Path(os.environ.get("DJANGO_LOG_DIR", BASE_DIR / "logs"))
 MAIN_LOG_FILE = _resolve_log_path("DJANGO_LOG_FILE", LOG_DIR / "app.log")
-OFFLINE_SYNC_LOG_FILE = _resolve_log_path(
-    "DJANGO_SYNC_LOG_FILE", LOG_DIR / "offline-sync-errors.log"
-)
 LOG_ROTATION_MAX_BYTES = env_int("DJANGO_LOG_MAX_BYTES", 5 * 1024 * 1024)
 LOG_ROTATION_BACKUP_COUNT = env_int("DJANGO_LOG_BACKUP_COUNT", 10)
-OFFLINE_SYNC_LOG_MAX_BYTES = env_int(
-    "DJANGO_SYNC_LOG_MAX_BYTES", LOG_ROTATION_MAX_BYTES
-)
-OFFLINE_SYNC_LOG_BACKUP_COUNT = env_int(
-    "DJANGO_SYNC_LOG_BACKUP_COUNT", LOG_ROTATION_BACKUP_COUNT
-)
 
 LOGGING = {
     "version": 1,
@@ -202,16 +194,6 @@ LOGGING = {
             "level": LOG_LEVEL,
             "delay": True,
         },
-        "offline_sync_file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "formatter": "verbose",
-            "filename": str(OFFLINE_SYNC_LOG_FILE),
-            "maxBytes": OFFLINE_SYNC_LOG_MAX_BYTES,
-            "backupCount": OFFLINE_SYNC_LOG_BACKUP_COUNT,
-            "encoding": "utf-8",
-            "level": "INFO",
-            "delay": True,
-        },
     },
     "loggers": {
         "django": {
@@ -222,11 +204,6 @@ LOGGING = {
         "django.request": {
             "handlers": ["console"],
             "level": "ERROR",
-            "propagate": False,
-        },
-        "audits.offline_sync": {
-            "handlers": ["console"],
-            "level": "INFO",
             "propagate": False,
         },
     },
@@ -278,12 +255,9 @@ __all__ = [
     "LOGOUT_REDIRECT_URL",
     "LOG_DIR",
     "MAIN_LOG_FILE",
-    "OFFLINE_SYNC_LOG_FILE",
     "LOG_LEVEL",
     "LOG_ROTATION_MAX_BYTES",
     "LOG_ROTATION_BACKUP_COUNT",
-    "OFFLINE_SYNC_LOG_MAX_BYTES",
-    "OFFLINE_SYNC_LOG_BACKUP_COUNT",
     "LOGGING",
     "env_bool",
     "env_int",

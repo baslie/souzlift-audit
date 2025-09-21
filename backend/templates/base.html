@@ -101,14 +101,5 @@
     <script src="{% static 'js/alpine.min.js' %}" defer></script>
     {% endif %}
     {% block extra_js %}{% endblock %}
-    <script>
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", function () {
-          navigator.serviceWorker.register("{% url 'service-worker' %}").catch(function (error) {
-            console.warn("Service worker registration failed", error);
-          });
-        });
-      }
-    </script>
   </body>
 </html>

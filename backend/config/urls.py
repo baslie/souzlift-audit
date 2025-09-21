@@ -7,22 +7,17 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
-from audits.api import CatalogSnapshotView, OfflineSyncView
-from config.views import ServiceWorkerView
-
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
     path("catalog/", include("catalog.urls")),
+    path("checklists/", include("checklists.urls")),
     path("audits/", include("audits.urls")),
-    path("api/offline-sync/", OfflineSyncView.as_view(), name="offline-sync"),
     path(
-        "api/catalog/snapshot/",
-        CatalogSnapshotView.as_view(),
-        name="catalog-snapshot",
+        "",
+        RedirectView.as_view(pattern_name="accounts:dashboard", permanent=False),
+        name="home",
     ),
-    path("service-worker.js", ServiceWorkerView.as_view(), name="service-worker"),
-    path("", RedirectView.as_view(pattern_name="accounts:dashboard", permanent=False), name="home"),
 ]
 
 if settings.DEBUG:

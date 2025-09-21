@@ -21,65 +21,34 @@ _ACTIVE_VIEW_MAP: dict[str, str] = {
     "accounts:dashboard": "dashboard",
     "audits:audit-list": "audits",
     "audits:audit-detail": "audits",
-    "audits:audit-export-print": "audits",
-    "audits:audit-export-csv": "audits",
-    "audits:audit-export-excel": "audits",
-    "audits:audit-mark-reviewed": "audits",
-    "audits:audit-log-list": "monitoring",
-    "audits:offline-batch-list": "monitoring",
-    "audits:offline-object-info": "audits",
-    "audits:offline-checklist": "audits",
     "catalog:building-list": "buildings",
     "catalog:building-create": "buildings",
     "catalog:building-update": "buildings",
-    "catalog:building-moderate": "buildings",
     "catalog:elevator-list": "elevators",
     "catalog:elevator-create": "elevators",
     "catalog:elevator-update": "elevators",
-    "catalog:elevator-moderate": "elevators",
-    "catalog:checklist-overview": "checklist",
-    "catalog:checklist-category-create": "checklist",
-    "catalog:checklist-category-update": "checklist",
-    "catalog:checklist-category-delete": "checklist",
-    "catalog:checklist-category-move": "checklist",
-    "catalog:checklist-section-create": "checklist",
-    "catalog:checklist-section-update": "checklist",
-    "catalog:checklist-section-delete": "checklist",
-    "catalog:checklist-section-move": "checklist",
-    "catalog:checklist-question-create": "checklist",
-    "catalog:checklist-question-update": "checklist",
-    "catalog:checklist-question-delete": "checklist",
-    "catalog:checklist-question-move": "checklist",
-    "catalog:checklist-option-create": "checklist",
-    "catalog:checklist-option-update": "checklist",
-    "catalog:checklist-option-delete": "checklist",
-    "catalog:checklist-option-move": "checklist",
-    "catalog:object-field-list": "settings",
-    "catalog:object-field-create": "settings",
-    "catalog:object-field-update": "settings",
-    "catalog:object-field-delete": "settings",
-    "catalog:object-field-move": "settings",
+    "checklists:template-list": "checklists",
+    "checklists:template-detail": "checklists",
 }
 
 
 def _build_admin_navigation() -> Iterable[NavigationItem]:
     return (
-        NavigationItem("dashboard", "Кабинет администратора", reverse("accounts:dashboard")),
-        NavigationItem("audits", "Аудиты", reverse("audits:audit-list")),
-        NavigationItem("monitoring", "Мониторинг", reverse("audits:audit-log-list")),
+        NavigationItem("dashboard", "Главная", reverse("accounts:dashboard")),
         NavigationItem("buildings", "Здания", reverse("catalog:building-list")),
         NavigationItem("elevators", "Лифты", reverse("catalog:elevator-list")),
-        NavigationItem("checklist", "Чек-лист", reverse("catalog:checklist-overview")),
-        NavigationItem("settings", "Настройки", reverse("catalog:object-field-list")),
+        NavigationItem("checklists", "Чек-листы", reverse("checklists:template-list")),
+        NavigationItem("audits", "Аудиты", reverse("audits:audit-list")),
     )
 
 
 def _build_auditor_navigation() -> Iterable[NavigationItem]:
     return (
-        NavigationItem("dashboard", "Кабинет аудитора", reverse("accounts:dashboard")),
+        NavigationItem("dashboard", "Главная", reverse("accounts:dashboard")),
         NavigationItem("audits", "Мои аудиты", reverse("audits:audit-list")),
         NavigationItem("buildings", "Здания", reverse("catalog:building-list")),
         NavigationItem("elevators", "Лифты", reverse("catalog:elevator-list")),
+        NavigationItem("checklists", "Чек-листы", reverse("checklists:template-list")),
     )
 
 
