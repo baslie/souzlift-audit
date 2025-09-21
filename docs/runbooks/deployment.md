@@ -83,11 +83,12 @@ PY
 | `DJANGO_STATIC_ROOT` | Путь к каталогу статики (`/opt/souzlift/backend/staticfiles`). |
 | `DJANGO_MEDIA_ROOT` | Путь к каталогу медиа (`/opt/souzlift/backend/media`). |
 | `DJANGO_LOG_DIR` | Каталог логов (`/var/log/souzlift`). |
+| `DJANGO_SENTRY_*` | Интеграция с Sentry (`DJANGO_SENTRY_DSN`, `DJANGO_SENTRY_ENVIRONMENT`, sample rate и PII-флаги). |
 | `DJANGO_EMAIL_*` | Почтовые настройки согласно [docs/runbooks/operations.md](operations.md). |
 | `DJANGO_EMAIL_NOTIFICATIONS_ENABLED` | Включение почтовых уведомлений (по умолчанию `false`, включайте только при настроенном SMTP). |
 | `DJANGO_SECURE_*` | HTTPS-настройки (HSTS, редиректы) в соответствии с политикой безопасности. |
 
-При необходимости добавьте переменные SMTP, OAuth и другие настройки, описанные в [docs/runbooks/operations.md](operations.md).
+При необходимости добавьте переменные SMTP, OAuth и другие настройки, описанные в [docs/runbooks/operations.md](operations.md). Для мониторинга ошибок заполните `DJANGO_SENTRY_DSN` и сопутствующие параметры (см. раздел 3 `operations.md`).
 
 ## 4. Служба systemd для gunicorn
 
@@ -168,7 +169,7 @@ sudo chcon -Rt httpd_sys_rw_content_t /opt/souzlift/backend/media
 - [ ] Файл `/etc/souzlift.env` заполнен и защищён (`640`).
 - [ ] `systemctl status gunicorn` и `systemctl status nginx` показывают состояние `active (running)`.
 - [ ] HTTPS-сертификаты установлены и проверены на истечение срока действия.
-- [ ] Настроены cron-задачи резервного копирования и обслуживания (см. `scripts/`).
+- [ ] Настроен ежедневный бэкап (`scripts/backup.sh`) и проверена интеграция Sentry (если используется).
 - [ ] Выполнены smoke-проверки и тестовый вход в систему под администратором.
 
 Документ актуализируется при изменении архитектуры или политик эксплуатации.

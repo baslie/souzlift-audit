@@ -173,33 +173,22 @@ LOG_FILE=/var/log/souzlift/backup.log \
 
 ## 3. Мониторинг и эксплуатационные проверки
 
-### 3.1. Логи и алерты
+### 3.1. Ошибки и журналирование
 
-- Django и gunicorn пишут логи в `/var/log/souzlift/`. Настройте ротацию через `logrotate` со сроком хранения 14 дней.
-- Настройте ежедневную отправку сводки через `logwatch` на почту ответственного инженера.
+- Приложение пишет логи в каталог, заданный `DJANGO_LOG_DIR` (по умолчанию `/var/log/souzlift`). Настройте ротацию через `logrotate`, чтобы хранить не менее 14 дней истории.
+- Для отслеживания исключений используйте встроенную интеграцию с Sentry. Укажите переменные `DJANGO_SENTRY_DSN`, `DJANGO_SENTRY_ENVIRONMENT`, а при необходимости — `DJANGO_SENTRY_TRACES_SAMPLE_RATE`, `DJANGO_SENTRY_PROFILES_SAMPLE_RATE` и `DJANGO_SENTRY_SEND_DEFAULT_PII`. Ошибки уровня `ERROR` и выше автоматически попадут в Sentry вместе со стек-трейсами.
+- При отсутствии Sentry продолжайте просматривать журналы средствами `journalctl` и ротации файлов.
 
 ### 3.2. Контроль доступности
 
-- Используйте системную утилиту `monit` или аналог для проверки процессов `gunicorn` и `nginx`. Конфигурация включает перезапуск служб при падении и алерт по e-mail.
-- Добавьте HTTP-проверку URL `/healthz/` (будет реализован на этапе T5.x) с ожиданием кода 200.
+- Минимальный набор мониторинга включает проверку служб `gunicorn` и `nginx` (например, `systemctl is-active --quiet gunicorn`). При падении процессов настройте автоматический перезапуск systemd.
+- Добавьте простую HTTP-проверку публичного URL (после реализации `/healthz/` в рамках T5.x либо главной страницы кабинета). Этого достаточно для SLA, принятого в архитектуре 3.0.
 
-### 3.3. Контроль ресурсов
+### 3.3. Контроль ресурсов и обслуживание
 
-- Для контроля свободного места используйте скрипт [`scripts/check_storage.sh`](../scripts/check_storage.sh). Он вычисляет процент заполнения диска для каталога проекта, сообщает суммарный объём медиа и возвращает код возврата `0/1/2` для состояний `OK/WARNING/CRITICAL`. Пример задания в `cron`:
-  ```bash
-  */60 * * * * PROJECT_ROOT=/opt/souzlift \
-    /opt/souzlift/scripts/check_storage.sh >> /var/log/souzlift/disk_usage.log 2>&1
-  ```
-- Для еженедельного обслуживания добавьте задания:
-  - `scripts/run_clearsessions.sh` — обёртка над `python manage.py clearsessions`, очищающая устаревшие записи сессий. Скрипт принимает переменные `PROJECT_ROOT`, `VENV_PATH`, `PYTHON_BIN` и наследует остальные аргументы Django-команды.
-  - `scripts/check_attachments.sh` — выводит сводку по каталогу вложений: количество файлов, суммарный объём, последний и самый крупный файлы. Параметрами `ATTACHMENTS_PATH` и `ATTACHMENTS_SUBDIR` можно указать альтернативный путь к каталогу медиа.
-  Пример расписания:
-  ```bash
-  0 3 * * 1 PROJECT_ROOT=/opt/souzlift VENV_PATH=/opt/souzlift/.venv \
-    /opt/souzlift/scripts/run_clearsessions.sh >> /var/log/souzlift/maintenance.log 2>&1
-  30 3 * * 1 PROJECT_ROOT=/opt/souzlift VENV_PATH=/opt/souzlift/.venv \
-    /opt/souzlift/scripts/check_attachments.sh >> /var/log/souzlift/attachments.log 2>&1
-  ```
+- Скрипт [`scripts/check_storage.sh`](../scripts/check_storage.sh) помогает отслеживать заполнение диска и объём каталога медиа. Его можно запускать вручную или по расписанию с периодичностью, согласованной с заказчиком (например, раз в сутки).
+- Дополнительные утилиты (`scripts/run_clearsessions.sh`, `scripts/check_attachments.sh`) используйте по мере необходимости — офлайн-джобы и вспомогательные очереди отключены, поэтому обязательных фоновых задач, кроме резервного копирования, не требуется.
+- При появлении новых требований к наблюдаемости расширяйте мониторинг точечно, оценивая влияние на упрощённую архитектуру (§2.7 [docs/architecture/v3.md](../architecture/v3.md#2-%D0%BA%D0%BB%D1%8E%D1%87%D0%B5%D0%B2%D1%8B%D0%B5-%D0%B4%D0%BE%D0%BF%D1%83%D1%89%D0%B5%D0%BD%D0%B8%D1%8F-%D0%B8-%D0%BE%D0%B3%D1%80%D0%B0%D0%BD%D0%B8%D1%87%D0%B5%D0%BD%D0%B8%D1%8F)).
 
 ### 3.4. Поддержка пользователей
 

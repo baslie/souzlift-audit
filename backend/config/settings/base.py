@@ -1,6 +1,7 @@
 """Base settings for the «Союзлифт Аудит» Django project."""
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Iterable, List
@@ -35,6 +36,18 @@ def env_int(name: str, default: int) -> int:
         return default
     try:
         return int(value)
+    except ValueError:
+        return default
+
+
+def env_float(name: str, default: float) -> float:
+    """Read a floating-point value from the environment."""
+
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
     except ValueError:
         return default
 
@@ -211,6 +224,38 @@ LOGGING = {
     },
 }
 
+SENTRY_DSN = os.environ.get("DJANGO_SENTRY_DSN", "").strip()
+SENTRY_ENVIRONMENT = os.environ.get(
+    "DJANGO_SENTRY_ENVIRONMENT", ENVIRONMENT
+).strip() or ENVIRONMENT
+SENTRY_TRACES_SAMPLE_RATE = env_float("DJANGO_SENTRY_TRACES_SAMPLE_RATE", 0.0)
+SENTRY_PROFILES_SAMPLE_RATE = env_float("DJANGO_SENTRY_PROFILES_SAMPLE_RATE", 0.0)
+SENTRY_SEND_DEFAULT_PII = env_bool("DJANGO_SENTRY_SEND_DEFAULT_PII", False)
+
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+
+        log_level_numeric = getattr(
+            logging, str(LOG_LEVEL).upper(), logging.INFO
+        )
+        sentry_logging = LoggingIntegration(
+            level=log_level_numeric,
+            event_level=logging.ERROR,
+        )
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            environment=SENTRY_ENVIRONMENT,
+            integrations=[DjangoIntegration(), sentry_logging],
+            traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+            profiles_sample_rate=SENTRY_PROFILES_SAMPLE_RATE,
+            send_default_pii=SENTRY_SEND_DEFAULT_PII,
+        )
+    except Exception:  # pragma: no cover - defensive guardrail for startup
+        logging.getLogger(__name__).exception("Failed to initialise Sentry SDK")
+
 __all__ = [
     "BASE_DIR",
     "ENVIRONMENT",
@@ -258,6 +303,12 @@ __all__ = [
     "LOG_ROTATION_BACKUP_COUNT",
     "LOGGING",
     "env_bool",
+    "env_float",
     "env_int",
     "env_list",
+    "SENTRY_DSN",
+    "SENTRY_ENVIRONMENT",
+    "SENTRY_TRACES_SAMPLE_RATE",
+    "SENTRY_PROFILES_SAMPLE_RATE",
+    "SENTRY_SEND_DEFAULT_PII",
 ]
