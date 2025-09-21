@@ -13,6 +13,8 @@ ENV/
 *.sqlite3
 media/
 staticfiles/
+!/backend/staticfiles/
+!/backend/staticfiles/.gitkeep
 
 # IDEs and editors
 .idea/
