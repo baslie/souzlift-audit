@@ -2,7 +2,16 @@
 {% block title %}Аудит №{{ audit.id }} · Союзлифт Аудит{% endblock %}
 {% block heading %}Аудит №{{ audit.id }}{% endblock %}
 {% block subheading %}
-  <p class="mb-0 text-body-secondary">Чек-лист: <strong>{{ audit.template.name }}</strong> · Статус: {{ audit.get_status_display }}.</p>
+  <p class="mb-0 text-body-secondary">
+    Чек-лист: <strong>{{ audit.template.name }}</strong>
+    · Статус: {{ audit.get_status_display }}
+    {% if audit.assigned_to %}
+      · Исполнитель:
+      {% with profile=audit.assigned_to.profile %}
+        {{ profile.full_name|default:audit.assigned_to.get_username }}
+      {% endwith %}
+    {% endif %}
+  </p>
 {% endblock %}
 {% block actions %}
   <a href="{% url 'audits:audit-list' %}" class="btn btn-outline-secondary btn-sm">Вернуться к списку</a>
@@ -23,14 +32,26 @@
                 <dt class="text-uppercase text-muted">Лифт</dt>
                 <dd class="mb-0 fw-medium">{{ audit.elevator.identifier }}</dd>
               </div>
-              <div>
+              <div class="mb-2">
                 <dt class="text-uppercase text-muted">Статус</dt>
                 <dd class="mb-0">{{ audit.get_status_display }}</dd>
+              </div>
+              <div>
+                <dt class="text-uppercase text-muted">Исполнитель</dt>
+                <dd class="mb-0">
+                  {% if audit.assigned_to %}
+                    {% with profile=audit.assigned_to.profile %}
+                      {{ profile.full_name|default:audit.assigned_to.get_username }}
+                    {% endwith %}
+                  {% else %}
+                    <span class="text-body-tertiary">—</span>
+                  {% endif %}
+                </dd>
               </div>
             </dl>
           </div>
           <div class="col-md-6">
-            <h2 class="h6 text-uppercase text-muted">Сроки</h2>
+            <h2 class="h6 text-uppercase text-muted">Сроки и результаты</h2>
             <dl class="mt-2 small mb-0">
               <div class="mb-2">
                 <dt class="text-uppercase text-muted">Дедлайн</dt>
@@ -50,53 +71,141 @@
       </div>
     </section>
 
-    <section class="card shadow-sm">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2 class="h5 mb-0">Ответы</h2>
-          <span class="small text-body-secondary">{{ responses|length }} из {{ audit.template.items.count }} пунктов заполнено</span>
+    {% if audit.admin_comment %}
+      <section class="card border-warning shadow-sm">
+        <div class="card-body">
+          <h2 class="h6 text-warning text-uppercase mb-2">Комментарий администратора</h2>
+          <p class="mb-0">{{ audit.admin_comment }}</p>
         </div>
-        <div class="d-flex flex-column gap-3">
-          {% for response in responses %}
-            <article class="border rounded p-3 bg-body">
-              <h3 class="h6 mb-2">{{ response.item.question }}</h3>
-              <div class="row g-3 small">
-                <div class="col-md-4">
-                  <div class="text-uppercase text-muted">Тип</div>
-                  <div class="fw-medium">{{ response.item.get_score_type_display }}</div>
+      </section>
+    {% endif %}
+
+    <form method="post" class="d-flex flex-column gap-4" novalidate>
+      {% csrf_token %}
+      <section class="card shadow-sm">
+        <div class="card-body d-flex flex-column gap-3">
+          <div class="d-flex flex-column flex-lg-row justify-content-lg-between align-items-lg-center gap-3">
+            <div>
+              <h2 class="h5 mb-1">Чек-лист</h2>
+              <p class="small text-body-secondary mb-0">{{ audit.template.description|default:"Отметьте результаты проверки и добавьте комментарии." }}</p>
+            </div>
+            <span class="badge text-bg-light text-body-secondary align-self-start align-self-lg-center">
+              {{ completed_count }} из {{ total_items }} пунктов заполнено
+            </span>
+          </div>
+          {% if show_read_only_alert %}
+            <div class="alert alert-info mb-0" role="alert">
+              Аудит отправлен и доступен только для чтения до возврата администратором.
+            </div>
+          {% endif %}
+          <div class="d-flex flex-column gap-3">
+            {% for form in response_forms %}
+              <article class="border rounded p-3 bg-body">
+                {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                <div class="d-flex flex-column flex-lg-row justify-content-lg-between align-items-lg-start gap-2">
+                  <h3 class="h6 mb-0">{{ forloop.counter }}. {{ form.item.question }}</h3>
+                  <span class="badge text-bg-secondary">{{ form.item.get_score_type_display }}</span>
                 </div>
-                <div class="col-md-4">
-                  <div class="text-uppercase text-muted">Ответ</div>
-                  <div class="fw-medium">
-                    {% if response.item.score_type == 'numeric' %}
-                      {{ response.numeric_answer }}
-                    {% else %}
-                      {{ response.selected_option }}
+                <ul class="list-inline small text-body-secondary mt-2 mb-3">
+                  {% if form.item.area %}
+                    <li class="list-inline-item"><span class="badge rounded-pill text-bg-light">{{ form.item.area }}</span></li>
+                  {% endif %}
+                  {% if form.item.category %}
+                    <li class="list-inline-item"><span class="badge rounded-pill text-bg-light">{{ form.item.category }}</span></li>
+                  {% endif %}
+                  {% if form.item.requires_comment %}
+                    <li class="list-inline-item text-danger-emphasis">Комментарий обязателен</li>
+                  {% endif %}
+                </ul>
+                {% if form.item.help_text %}
+                  <p class="small text-body-secondary mb-3">{{ form.item.help_text }}</p>
+                {% endif %}
+                {% if form.non_field_errors %}
+                  <div class="alert alert-danger small" role="alert">{{ form.non_field_errors|join:" " }}</div>
+                {% endif %}
+                <div class="row g-3">
+                  {% if form.item.score_type == form.item.ScoreType.NUMERIC %}
+                    <div class="col-lg-4">
+                      <label for="{{ form.numeric_answer.id_for_label }}" class="form-label">{{ form.numeric_answer.label }}</label>
+                      {{ form.numeric_answer }}
+                      {% if form.numeric_answer.help_text %}
+                        {{ form.numeric_answer.help_text|safe }}
+                      {% endif %}
+                      {% if form.numeric_answer.errors %}
+                        <div class="invalid-feedback d-block">{{ form.numeric_answer.errors|striptags }}</div>
+                      {% endif %}
+                    </div>
+                  {% else %}
+                    <div class="col-lg-4">
+                      <label for="{{ form.selected_option.id_for_label }}" class="form-label">{{ form.selected_option.label }}</label>
+                      {{ form.selected_option }}
+                      {% if form.selected_option.help_text %}
+                        {{ form.selected_option.help_text|safe }}
+                      {% endif %}
+                      {% if form.selected_option.errors %}
+                        <div class="invalid-feedback d-block">{{ form.selected_option.errors|striptags }}</div>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                  <div class="col-lg-8">
+                    <label for="{{ form.comment.id_for_label }}" class="form-label">
+                      {{ form.comment.label }}
+                      {% if form.item.requires_comment %}<span class="text-danger">*</span>{% endif %}
+                    </label>
+                    {{ form.comment }}
+                    {% if form.comment.help_text %}
+                      {{ form.comment.help_text|safe }}
+                    {% endif %}
+                    {% if form.comment.errors %}
+                      <div class="invalid-feedback d-block">{{ form.comment.errors|striptags }}</div>
                     {% endif %}
                   </div>
                 </div>
-                <div class="col-md-4">
-                  <div class="text-uppercase text-muted">Комментарий</div>
-                  <div>{% if response.comment %}{{ response.comment }}{% else %}<span class="text-body-tertiary">—</span>{% endif %}</div>
-                </div>
-              </div>
-            </article>
-          {% empty %}
-            <div class="alert alert-secondary mb-0" role="alert">Ответы ещё не добавлены.</div>
-          {% endfor %}
+              </article>
+            {% empty %}
+              <div class="alert alert-secondary mb-0" role="alert">Чек-лист не содержит вопросов.</div>
+            {% endfor %}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    {% if items_without_response %}
+      {% if can_edit %}
+        <section class="card shadow-sm">
+          <div class="card-body d-flex flex-wrap gap-2 justify-content-end">
+            <button type="submit" name="action" value="save_draft" class="btn btn-outline-primary">Сохранить черновик</button>
+            <button type="submit" name="action" value="submit" class="btn btn-primary">Отправить на проверку</button>
+          </div>
+        </section>
+      {% endif %}
+    </form>
+
+    {% if can_request_changes and request_changes_form %}
       <section class="card shadow-sm">
         <div class="card-body">
-          <h2 class="h5">Оставшиеся вопросы</h2>
-          <ul class="list-group list-group-flush mt-3">
-            {% for item in items_without_response %}
-              <li class="list-group-item">{{ item.question }}</li>
-            {% endfor %}
-          </ul>
+          <h2 class="h5 mb-3">Вернуть аудит в черновик</h2>
+          <p class="small text-body-secondary">Сообщение увидит аудитор в интерфейсе и в уведомлениях.</p>
+          <form method="post" novalidate class="d-flex flex-column gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="request_changes" />
+            {% if request_changes_form.non_field_errors %}
+              <div class="alert alert-danger" role="alert">{{ request_changes_form.non_field_errors|join:" " }}</div>
+            {% endif %}
+            <div>
+              <label for="{{ request_changes_form.message.id_for_label }}" class="form-label">
+                {{ request_changes_form.message.label }}<span class="text-danger">*</span>
+              </label>
+              {{ request_changes_form.message }}
+              {% if request_changes_form.message.help_text %}
+                {{ request_changes_form.message.help_text|safe }}
+              {% endif %}
+              {% if request_changes_form.message.errors %}
+                <div class="invalid-feedback d-block">{{ request_changes_form.message.errors|striptags }}</div>
+              {% endif %}
+            </div>
+            <div class="d-flex flex-wrap gap-2 justify-content-end">
+              <button type="submit" class="btn btn-outline-danger">Вернуть в черновик</button>
+            </div>
+          </form>
         </div>
       </section>
     {% endif %}
