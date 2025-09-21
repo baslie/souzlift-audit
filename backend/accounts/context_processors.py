@@ -18,7 +18,6 @@ class NavigationItem:
 
 
 _ACTIVE_VIEW_MAP: dict[str, str] = {
-    "accounts:dashboard": "dashboard",
     "audits:audit-list": "audits",
     "audits:audit-detail": "audits",
     "catalog:building-list": "buildings",
@@ -32,24 +31,15 @@ _ACTIVE_VIEW_MAP: dict[str, str] = {
 }
 
 
-def _build_admin_navigation() -> Iterable[NavigationItem]:
-    return (
-        NavigationItem("dashboard", "Главная", reverse("accounts:dashboard")),
-        NavigationItem("buildings", "Здания", reverse("catalog:building-list")),
-        NavigationItem("elevators", "Лифты", reverse("catalog:elevator-list")),
-        NavigationItem("checklists", "Чек-листы", reverse("checklists:template-list")),
-        NavigationItem("audits", "Аудиты", reverse("audits:audit-list")),
+def _build_navigation_items() -> Iterable[NavigationItem]:
+    navigation_blueprint: tuple[tuple[str, str, str], ...] = (
+        ("buildings", "Здания", "catalog:building-list"),
+        ("elevators", "Лифты", "catalog:elevator-list"),
+        ("checklists", "Чек-листы", "checklists:template-list"),
+        ("audits", "Аудиты", "audits:audit-list"),
     )
-
-
-def _build_auditor_navigation() -> Iterable[NavigationItem]:
-    return (
-        NavigationItem("dashboard", "Главная", reverse("accounts:dashboard")),
-        NavigationItem("audits", "Мои аудиты", reverse("audits:audit-list")),
-        NavigationItem("buildings", "Здания", reverse("catalog:building-list")),
-        NavigationItem("elevators", "Лифты", reverse("catalog:elevator-list")),
-        NavigationItem("checklists", "Чек-листы", reverse("checklists:template-list")),
-    )
+    for key, label, view_name in navigation_blueprint:
+        yield NavigationItem(key, label, reverse(view_name))
 
 
 def primary_navigation(request: HttpRequest) -> dict[str, object]:
@@ -62,15 +52,13 @@ def primary_navigation(request: HttpRequest) -> dict[str, object]:
     if user.is_authenticated:
         profile = getattr(user, "profile", None)
         try:
-            if profile and getattr(profile, "is_admin", False):
-                items = list(_build_admin_navigation())
-            elif profile and getattr(profile, "is_auditor", False):
-                items = list(_build_auditor_navigation())
+            if profile and (getattr(profile, "is_admin", False) or getattr(profile, "is_auditor", False)):
+                items = list(_build_navigation_items())
+            elif user.is_staff or user.is_superuser:
+                items = list(_build_navigation_items())
             else:
-                items = [NavigationItem("dashboard", "Личный кабинет", reverse("accounts:dashboard"))]
+                items = []
         except NoReverseMatch:
-            # During misconfiguration we prefer to fail silently to avoid
-            # breaking the entire page rendering.
             items = []
 
         if items:
@@ -85,6 +73,9 @@ def primary_navigation(request: HttpRequest) -> dict[str, object]:
 
     if not active_key:
         active_key = default_active
+
+    if not items:
+        active_key = ""
 
     return {
         "primary_navigation": {

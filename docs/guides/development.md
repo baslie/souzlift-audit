@@ -6,7 +6,7 @@
 
 - **Язык и фреймворк:** Python 3.11, Django 5.x.
 - **База данных:** SQLite (файл в каталоге `backend/`).
-- **Фронтенд:** Django Templates, Tailwind CSS (предсобранный CSS-файл), точечное использование Alpine.js и HTMX.
+- **Фронтенд:** Django Templates, Bootstrap 5 (локальные CSS/JS без сборки).
 - **Тестирование и качество кода:** `pytest`, `pytest-django`, `ruff`.
 - **Управление зависимостями:** стандартный `pip` и `requirements.txt`.
 
@@ -39,13 +39,11 @@
 
 Дополнительные инструкции по развёртыванию и обслуживанию будут добавляться в каталоге `docs/` по мере реализации этапов T9–T12.
 
-### Tailwind CSS и фронтенд-статика
+### Bootstrap 5 и фронтенд-статика
 
-- Предсобранный файл Tailwind лежит в `backend/static/css/tailwind.min.css`. Источник для сборки — `backend/static/css/tailwind.src.css` и конфигурация `tailwind.config.js` в корне репозитория.
-- При изменении шаблонов или добавлении новых классов запустите компиляцию:
-  - при наличии Node.js — `NODE_ENV=production npx tailwindcss -i backend/static/css/tailwind.src.css -o backend/static/css/tailwind.min.css --minify`;
-  - без Node.js — скачайте [standalone-бинарь Tailwind](https://github.com/tailwindlabs/tailwindcss/releases) и выполните аналогичную команду, указав путь к бинарю.
-- Локальные копии `Alpine.js` и `HTMX` находятся в `backend/static/js/` и подключаются в шаблоне `base.html` только при передаче флагов `load_alpine` и `load_htmx` в контекст.
+- Минифицированные файлы Bootstrap находятся в `backend/static/css/bootstrap.min.css` и `backend/static/js/bootstrap.bundle.min.js`.
+- Дополнительные правки интерфейса размещаются в `backend/static/css/app.css`. При изменениях достаточно перезапустить `collectstatic`; отдельная сборка не требуется.
+- Локальные копии сторонних библиотек не используются: весь функционал реализован средствами Bootstrap и нативного JavaScript.
 
 ## Стандарты разработки
 
@@ -120,12 +118,7 @@
    ruff check backend/
    ```
    При необходимости добавьте ключ `-m` к `pytest` для запуска отдельных меток (`pytest -m "not slow"`).
-8. Для проверки фронтенд-стилей установите Node.js и выполните сборку Tailwind (по желанию):
-   ```powershell
-   npm install --global tailwindcss
-   tailwindcss -i backend/static/css/tailwind.src.css -o backend/static/css/tailwind.min.css --minify
-   ```
-9. Снимите дамп логов при ошибках (`Get-Content backend\logs\app.log -Wait`) и приложите его к отчёту.
+8. Снимите дамп логов при ошибках (`Get-Content backend\logs\app.log -Wait`) и приложите его к отчёту.
 
 > **Совет:** используйте [Windows Terminal](https://aka.ms/terminal) или [WSL2](https://learn.microsoft.com/windows/wsl/) для более комфортной работы с командной строкой. При запуске сервера во встроенном брандмауэре появится запрос на разрешение доступа — подтвердите для профиля «Частная сеть».
 

@@ -2,159 +2,111 @@
 {% block title %}Справочник лифтов · Союзлифт Аудит{% endblock %}
 {% block heading %}Справочник лифтов{% endblock %}
 {% block subheading %}
-  <p class="text-sm text-ink-500">
-    Добавляйте новые лифты и отслеживайте статус их модерации. Неподтверждённые записи видны только их авторам и администраторам.
-  </p>
+  <p class="mb-0 text-body-secondary">Добавляйте новые лифты и отслеживайте статус их модерации. Неподтверждённые записи видны только их авторам и администраторам.</p>
 {% endblock %}
 {% block actions %}
-  <a href="{% url 'catalog:elevator-create' %}" class="btn btn--primary">
-    Добавить лифт
-  </a>
+  <a href="{% url 'catalog:elevator-create' %}" class="btn btn-primary">Добавить лифт</a>
 {% endblock %}
 {% block content %}
-  <form method="get" class="mb-6 grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] md:items-end">
-    <div>
-      <label for="id-search" class="form-label text-xs uppercase tracking-wide text-ink-500">Поиск</label>
+  <form method="get" class="row g-3 align-items-end mb-4">
+    <div class="col-md-6 col-lg-5">
+      <label for="id-search" class="form-label small text-uppercase text-muted">Поиск</label>
       <input
         type="search"
         id="id-search"
         name="{{ search_param }}"
         value="{{ search_query }}"
         placeholder="Введите номер или часть описания"
-        class="app-input"
+        class="form-control"
       />
     </div>
-    <div>
-      <label for="id-status" class="form-label text-xs uppercase tracking-wide text-ink-500">Статус</label>
-      <select
-        id="id-status"
-        name="{{ status_param }}"
-        class="app-input app-input--select"
-      >
+    <div class="col-md-4 col-lg-3">
+      <label for="id-status" class="form-label small text-uppercase text-muted">Статус</label>
+      <select id="id-status" name="{{ status_param }}" class="form-select">
         {% for value, label in status_choices %}
           <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
     </div>
-    <div class="flex gap-2">
-      <button type="submit" class="btn btn--primary">
-        Применить
-      </button>
-      <a href="{% url 'catalog:elevator-list' %}" class="btn btn--secondary">
-        Сбросить
-      </a>
+    <div class="col-md-2 col-lg-4 d-flex gap-2 justify-content-md-end">
+      <button type="submit" class="btn btn-primary">Применить</button>
+      <a href="{% url 'catalog:elevator-list' %}" class="btn btn-outline-secondary">Сбросить</a>
     </div>
   </form>
 
   {% if object_list %}
-    <div class="overflow-x-auto">
-      <table class="min-w-full divide-y divide-border-subtle text-sm">
-        <thead class="bg-surface-subtle text-xs uppercase tracking-wide text-ink-500">
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead class="table-light text-uppercase small">
           <tr>
-            <th scope="col" class="px-4 py-3 text-left font-semibold">Лифт</th>
-            <th scope="col" class="px-4 py-3 text-left font-semibold">Статус</th>
-            <th scope="col" class="px-4 py-3 text-left font-semibold">Здание</th>
-            <th scope="col" class="px-4 py-3 text-left font-semibold">Автор</th>
-            <th scope="col" class="px-4 py-3 text-left font-semibold">Подтвердил</th>
-            <th scope="col" class="px-4 py-3 text-left font-semibold">Действия</th>
+            <th scope="col">Лифт</th>
+            <th scope="col">Статус</th>
+            <th scope="col">Здание</th>
+            <th scope="col">Автор</th>
+            <th scope="col">Подтвердил</th>
+            <th scope="col" class="text-end">Действия</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-border-subtle bg-surface-elevated">
+        <tbody>
           {% for elevator in object_list %}
-            <tr class="align-top">
-              <td class="px-4 py-4">
-                <div class="font-semibold text-ink-900">{{ elevator.identifier }}</div>
-                <div class="text-xs text-ink-500">{{ elevator.get_status_display }}</div>
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ elevator.identifier }}</div>
+                <div class="small text-body-secondary">{{ elevator.get_status_display }}</div>
                 {% if elevator.description %}
-                  <div class="mt-2 rounded border border-border-subtle bg-surface-subtle p-2 text-xs text-ink-600">{{ elevator.description }}</div>
+                  <div class="border rounded mt-2 p-2 small bg-body-secondary">{{ elevator.description }}</div>
                 {% endif %}
-                <div class="mt-1 text-xs text-ink-400">Создано {{ elevator.created_at|date:"d.m.Y H:i" }}</div>
+                <div class="small text-body-tertiary">Создано {{ elevator.created_at|date:"d.m.Y H:i" }}</div>
               </td>
-              <td class="px-4 py-4">
+              <td>
                 {% if elevator.review_status == ReviewStatus.APPROVED %}
-                  {% with "border-success-200 bg-success-50 text-success-700" as status_classes %}
-                    <span class="inline-flex rounded-full border px-3 py-1 text-xs font-semibold {{ status_classes }}">
-                      {{ elevator.get_review_status_display }}
-                    </span>
-                  {% endwith %}
+                  <span class="badge text-bg-success">{{ elevator.get_review_status_display }}</span>
                 {% elif elevator.review_status == ReviewStatus.REJECTED %}
-                  {% with "border-danger-200 bg-danger-50 text-danger-700" as status_classes %}
-                    <span class="inline-flex rounded-full border px-3 py-1 text-xs font-semibold {{ status_classes }}">
-                      {{ elevator.get_review_status_display }}
-                    </span>
-                  {% endwith %}
+                  <span class="badge text-bg-danger">{{ elevator.get_review_status_display }}</span>
+                {% elif elevator.review_status == ReviewStatus.PENDING %}
+                  <span class="badge text-bg-warning">{{ elevator.get_review_status_display }}</span>
                 {% else %}
-                  {% with "border-warning-200 bg-warning-50 text-warning-700" as status_classes %}
-                    <span class="inline-flex rounded-full border px-3 py-1 text-xs font-semibold {{ status_classes }}">
-                      {{ elevator.get_review_status_display }}
-                    </span>
-                  {% endwith %}
+                  <span class="badge text-bg-secondary">{{ elevator.get_review_status_display }}</span>
                 {% endif %}
               </td>
-              <td class="px-4 py-4">
-                <div class="font-medium text-ink-800">{{ elevator.building.address }}</div>
+              <td>
+                <div class="fw-medium">{{ elevator.building.address }}</div>
                 {% if elevator.building.entrance %}
-                  <div class="text-xs text-ink-500">Подъезд: {{ elevator.building.entrance }}</div>
+                  <div class="small text-body-secondary">Подъезд: {{ elevator.building.entrance }}</div>
                 {% endif %}
               </td>
-              <td class="px-4 py-4">
+              <td>
                 {% if elevator.created_by %}
-                  <div class="font-medium text-ink-800">{{ elevator.created_by.profile.full_name|default:elevator.created_by.username }}</div>
+                  <div class="fw-medium">{{ elevator.created_by.profile.full_name|default:elevator.created_by.username }}</div>
                 {% else %}
-                  <div class="text-ink-400">—</div>
+                  <div class="text-body-tertiary">—</div>
                 {% endif %}
               </td>
-              <td class="px-4 py-4">
+              <td>
                 {% if elevator.verified_by %}
-                  <div class="font-medium text-ink-800">{{ elevator.verified_by.profile.full_name|default:elevator.verified_by.username }}</div>
+                  <div class="fw-medium">{{ elevator.verified_by.profile.full_name|default:elevator.verified_by.username }}</div>
                   {% if elevator.verified_at %}
-                    <div class="text-xs text-ink-500">{{ elevator.verified_at|date:"d.m.Y H:i" }}</div>
+                    <div class="small text-body-secondary">{{ elevator.verified_at|date:"d.m.Y H:i" }}</div>
                   {% endif %}
                 {% else %}
-                  <div class="text-ink-400">—</div>
+                  <div class="text-body-tertiary">—</div>
                 {% endif %}
               </td>
-              <td class="px-4 py-4">
-                <div class="flex flex-col gap-2">
+              <td class="text-end">
+                <div class="d-flex flex-column flex-lg-row justify-content-end gap-2">
                   {% if can_moderate or elevator.created_by_id == request.user.id %}
                     {% if can_moderate or elevator.review_status != ReviewStatus.APPROVED %}
-                      <a
-                        href="{% url 'catalog:elevator-update' elevator.pk %}"
-                        class="btn btn--secondary text-xs px-3 py-1"
-                      >
-                        Редактировать
-                      </a>
+                      <a href="{% url 'catalog:elevator-update' elevator.pk %}" class="btn btn-outline-secondary btn-sm">Редактировать</a>
                     {% endif %}
                   {% endif %}
                   {% if can_moderate %}
-                    <form method="post" action="{% url 'catalog:elevator-moderate' elevator.pk %}" class="flex flex-wrap gap-2">
+                    <form method="post" action="{% url 'catalog:elevator-moderate' elevator.pk %}" class="d-flex flex-wrap gap-2 justify-content-end">
                       {% csrf_token %}
                       <input type="hidden" name="next" value="{{ request.get_full_path }}" />
-                      <button
-                        type="submit"
-                        name="action"
-                        value="approve"
-                        class="inline-flex flex-1 items-center justify-center rounded bg-success-600 px-3 py-1 text-xs font-semibold text-white shadow-soft hover:bg-success-500"
-                      >
-                        Утвердить
-                      </button>
-                      <button
-                        type="submit"
-                        name="action"
-                        value="reject"
-                        class="inline-flex flex-1 items-center justify-center rounded bg-danger-600 px-3 py-1 text-xs font-semibold text-white shadow-soft hover:bg-danger-500"
-                      >
-                        Отклонить
-                      </button>
+                      <button type="submit" name="action" value="approve" class="btn btn-success btn-sm">Утвердить</button>
+                      <button type="submit" name="action" value="reject" class="btn btn-danger btn-sm">Отклонить</button>
                       {% if elevator.review_status != ReviewStatus.PENDING %}
-                        <button
-                          type="submit"
-                          name="action"
-                          value="return"
-                          class="inline-flex flex-1 items-center justify-center rounded bg-warning-500 px-3 py-1 text-xs font-semibold text-white shadow-soft hover:bg-warning-600"
-                        >
-                          На проверку
-                        </button>
+                        <button type="submit" name="action" value="return" class="btn btn-warning btn-sm">На проверку</button>
                       {% endif %}
                     </form>
                   {% endif %}
@@ -167,34 +119,26 @@
     </div>
 
     {% if is_paginated %}
-      <div class="mt-6 flex items-center justify-between text-xs text-ink-600">
+      <div class="d-flex justify-content-between align-items-center mt-3 small text-body-secondary">
         <span>Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
-        <div class="flex items-center gap-2">
+        <div class="d-flex gap-2">
           {% if page_obj.has_previous %}
-            <a
-              href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
-              class="btn btn--secondary text-xs px-3 py-1"
-            >
-              Назад
-            </a>
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-outline-secondary btn-sm">Назад</a>
           {% else %}
-            <span class="rounded border border-border-subtle px-3 py-1 text-ink-300">Назад</span>
+            <span class="btn btn-outline-secondary btn-sm disabled">Назад</span>
           {% endif %}
           {% if page_obj.has_next %}
-            <a
-              href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
-              class="btn btn--secondary text-xs px-3 py-1"
-            >
-              Вперёд
-            </a>
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-outline-secondary btn-sm">Вперёд</a>
           {% else %}
-            <span class="rounded border border-border-subtle px-3 py-1 text-ink-300">Вперёд</span>
+            <span class="btn btn-outline-secondary btn-sm disabled">Вперёд</span>
           {% endif %}
         </div>
       </div>
     {% endif %}
   {% else %}
-    <p class="text-sm text-ink-600">Подходящих записей не найдено. Попробуйте изменить фильтры или добавьте новый лифт.</p>
+    <div class="alert alert-secondary mb-0" role="alert">
+      Подходящих записей не найдено. Попробуйте изменить фильтры или добавьте новый лифт.
+    </div>
   {% endif %}
 {% endblock %}
 

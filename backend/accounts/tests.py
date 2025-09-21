@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -11,10 +12,11 @@ from django.core import mail
 from django.http import HttpRequest
 from django.test import TestCase
 from django.test.client import RequestFactory
-from django.urls import reverse
+from django.urls import resolve, reverse
 from django.utils import timezone
 
 from . import admin as accounts_admin
+from .context_processors import primary_navigation
 from .models import UserProfile
 from .permissions import restrict_queryset_for_user
 
@@ -219,6 +221,64 @@ class UserNotificationTests(TestCase):
         )
 
         self.assertEqual(len(mail.outbox), 0)
+
+
+class PrimaryNavigationContextProcessorTests(TestCase):
+    """Validate the Bootstrap navigation context provided to templates."""
+
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+        self.factory = RequestFactory()
+
+    def _build_request(self, path: str, user: object) -> HttpRequest:
+        request = self.factory.get(path)
+        request.user = user
+        request.resolver_match = resolve(path)
+        return request
+
+    def test_admin_user_sees_all_primary_sections(self) -> None:
+        admin = self.UserModel.objects.create_superuser(
+            username="chief",
+            email="chief@example.com",
+            password="AdminPass123!",
+        )
+        admin.profile.role = UserProfile.Roles.ADMIN
+        admin.profile.save(update_fields=["role"])
+
+        path = reverse("catalog:building-list")
+        context = primary_navigation(self._build_request(path, admin))
+        navigation = context["primary_navigation"]
+
+        self.assertEqual(
+            [item.key for item in navigation["items"]],
+            ["buildings", "elevators", "checklists", "audits"],
+        )
+        self.assertEqual(navigation["active"], "buildings")
+        self.assertTrue(navigation["show_admin_link"])
+
+    def test_auditor_user_receives_navigation_and_active_view(self) -> None:
+        auditor = self.UserModel.objects.create_user(
+            username="auditor",
+            password="StrongPass123!",
+        )
+        auditor.profile.role = UserProfile.Roles.AUDITOR
+        auditor.profile.save(update_fields=["role"])
+
+        path = reverse("audits:audit-list")
+        context = primary_navigation(self._build_request(path, auditor))
+        navigation = context["primary_navigation"]
+
+        self.assertEqual(navigation["active"], "audits")
+        self.assertFalse(navigation["show_admin_link"])
+
+    def test_anonymous_user_has_no_navigation_entries(self) -> None:
+        request = self._build_request(reverse("catalog:building-list"), AnonymousUser())
+        context = primary_navigation(request)
+
+        navigation = context["primary_navigation"]
+        self.assertEqual(navigation["items"], [])
+        self.assertEqual(navigation["active"], "")
+        self.assertFalse(navigation["show_admin_link"])
 
 
 class UserAdminActionsTests(TestCase):

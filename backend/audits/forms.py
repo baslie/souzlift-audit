@@ -4,10 +4,10 @@ from __future__ import annotations
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from accounts.forms import TailwindFormMixin
+from accounts.forms import BootstrapFormMixin
 
 
-class AuditRequestChangesForm(forms.Form):
+class AuditRequestChangesForm(BootstrapFormMixin, forms.Form):
     """Form allowing administrators to request changes from an auditor."""
 
     message = forms.CharField(
@@ -15,7 +15,6 @@ class AuditRequestChangesForm(forms.Form):
         widget=forms.Textarea(
             attrs={
                 "rows": 4,
-                "class": "app-input app-input--textarea",
                 "placeholder": _("Опишите, какие корректировки необходимо внести."),
             }
         ),
@@ -33,7 +32,7 @@ class AuditRequestChangesForm(forms.Form):
         return stripped
 
 
-class AttachmentLimitForm(TailwindFormMixin, forms.Form):
+class AttachmentLimitForm(BootstrapFormMixin, forms.Form):
     """Форма обновления лимитов вложений для кабинета администратора."""
 
     max_size_mb = forms.IntegerField(

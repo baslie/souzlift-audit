@@ -1,23 +1,12 @@
 (function (window) {
   "use strict";
 
-  const BASE_OPTION_CLASSES = [
-    "border-slate-200",
-    "bg-white",
-    "text-slate-700",
-    "hover:border-sky-400",
-    "hover:text-slate-900",
-  ];
-  const ACTIVE_OPTION_CLASSES = [
-    "border-sky-500",
-    "bg-sky-600",
-    "text-white",
-    "shadow-sm",
-  ];
-  const HIGHLIGHT_COMMENT_CLASSES = ["border-amber-400", "focus:border-amber-500", "focus:ring-amber-200"];
-  const COMMENT_MISSING_CLASSES = ["ring-2", "ring-amber-500", "ring-offset-1"];
-  const DISABLED_TRIGGER_CLASSES = ["opacity-50", "cursor-not-allowed"];
-  const DEFAULT_COMMENT_BORDER = "border-slate-300";
+  const BASE_OPTION_CLASSES = ["btn", "btn-outline-secondary"];
+  const ACTIVE_OPTION_CLASSES = ["btn-primary", "text-white"];
+  const HIGHLIGHT_COMMENT_CLASSES = ["border", "border-warning", "shadow-sm"];
+  const COMMENT_MISSING_CLASSES = ["border", "border-warning", "shadow"];
+  const DISABLED_TRIGGER_CLASSES = ["disabled"];
+  const DEFAULT_COMMENT_BORDER = null;
   const MAX_CANVAS_EDGE = 1600;
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -195,11 +184,13 @@
         if (requiresComment) {
           question.commentField.setAttribute("required", "required");
           question.commentField.classList.add(...HIGHLIGHT_COMMENT_CLASSES);
-          question.commentField.classList.remove(DEFAULT_COMMENT_BORDER);
+          if (DEFAULT_COMMENT_BORDER) {
+            question.commentField.classList.remove(DEFAULT_COMMENT_BORDER);
+          }
         } else {
           question.commentField.removeAttribute("required");
           question.commentField.classList.remove(...HIGHLIGHT_COMMENT_CLASSES);
-          if (!question.commentField.classList.contains(DEFAULT_COMMENT_BORDER)) {
+          if (DEFAULT_COMMENT_BORDER && !question.commentField.classList.contains(DEFAULT_COMMENT_BORDER)) {
             question.commentField.classList.add(DEFAULT_COMMENT_BORDER);
           }
         }

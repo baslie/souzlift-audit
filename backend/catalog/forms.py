@@ -4,12 +4,12 @@ from __future__ import annotations
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from accounts.forms import TailwindFormMixin
+from accounts.forms import BootstrapFormMixin
 
 from .models import Building, Elevator
 
 
-class BuildingForm(TailwindFormMixin, forms.ModelForm):
+class BuildingForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Building
         fields = ["address", "entrance", "notes"]
@@ -32,7 +32,7 @@ class BuildingForm(TailwindFormMixin, forms.ModelForm):
         }
 
 
-class ElevatorForm(TailwindFormMixin, forms.ModelForm):
+class ElevatorForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Elevator
         fields = ["building", "identifier", "status", "description"]

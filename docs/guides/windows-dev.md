@@ -10,7 +10,6 @@
 | Python    | 3.11.x с установленным флажком *Add python.exe to PATH* |
 | Git       | Актуальная версия из [git-scm.com](https://git-scm.com/download/win) |
 | PowerShell| 5.1+ (по умолчанию в системе) |
-| Node.js   | (опционально) 18 LTS для пересборки Tailwind |
 
 > **Совет:** если установлены WSL2 или Windows Terminal, ими можно заменить встроенный PowerShell. Команды останутся теми же.
 
@@ -105,16 +104,10 @@ ruff check backend/             # линтер Python-кода
 
 При необходимости можно ограничить набор тестов: `pytest -m "not slow"` или `pytest backend/tests/test_accounts.py`.
 
-## 9. Работа со статикой и Tailwind (опционально)
+## 9. Работа со статикой
 
-Для пересборки CSS установите Tailwind CLI:
-
-```powershell
-npm install --global tailwindcss
-tailwindcss -i backend/static/css/tailwind.src.css -o backend/static/css/tailwind.min.css --minify
-```
-
-При отсутствии Node.js скачайте standalone-бинарь Tailwind и замените команду на запуск соответствующего `.exe`.
+Bootstrap 5 поставляется в репозитории в виде готовых файлов (`backend/static/css/bootstrap.min.css`, `backend/static/js/bootstrap.bundle.min.js`).
+Дополнительные правки можно вносить в `backend/static/css/app.css` — отдельная сборка не требуется.
 
 ## 10. Распространённые проблемы
 
@@ -124,7 +117,6 @@ tailwindcss -i backend/static/css/tailwind.src.css -o backend/static/css/tailwin
 | **`python manage.py` сообщает об отсутствующих модулях** | Убедитесь, что виртуальное окружение активировано и зависимости установлены без ошибок. |
 | **Сервер не стартует из-за занятого порта** | Запустите `python manage.py runserver 127.0.0.1:8001` или освободите порт 8000. |
 | **`pytest` завершился с ошибками миграций** | Перед тестами выполните `python manage.py migrate`. При необходимости удалите файл `backend/db/db.sqlite3` и запустите миграции заново. |
-| **Tailwind-классы не применяются** | Убедитесь, что используете файл `backend/static/css/tailwind.min.css`. При добавлении новых классов пересоберите CSS командой из раздела 9. |
 
 ## 11. Завершение работы
 
