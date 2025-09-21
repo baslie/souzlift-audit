@@ -9,7 +9,6 @@ from .views import (
     AccountLogoutView,
     AccountPasswordChangeDoneView,
     AccountPasswordChangeView,
-    ForcePasswordChangeView,
 )
 
 app_name = "accounts"
@@ -24,5 +23,4 @@ urlpatterns = [
         AccountPasswordChangeDoneView.as_view(),
         name="password-change-done",
     ),
-    path("password/force/", ForcePasswordChangeView.as_view(), name="force-password-change"),
 ]
