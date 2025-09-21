@@ -24,7 +24,7 @@ from pathlib import Path
 
 BASE_PATH = Path(r"C:\Users\Roman\Desktop")
 REPO_NAME = "souzlift-audit"
-DEFAULT_REPO_URL = "https://github.com/souzlift-audit/souzlift-audit.git"
+DEFAULT_REPO_URL = "https://github.com/baslie/souzlift-audit.git"
 
 
 def run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
