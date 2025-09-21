@@ -27,6 +27,8 @@ def _normalize_recipients(recipients: Iterable[str]) -> list[str]:
 def send_plain_email(subject: str, message: str, recipients: Sequence[str]) -> int:
     """Send a plain-text email if recipients are provided."""
 
+    if not getattr(settings, "EMAIL_NOTIFICATIONS_ENABLED", False):
+        return 0
     normalized = _normalize_recipients(recipients)
     if not normalized:
         return 0

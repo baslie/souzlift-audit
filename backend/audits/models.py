@@ -324,6 +324,53 @@ class AuditAttachment(models.Model):
             raise ValidationError(
                 {"response": _("Вложение должно относиться к ответу текущего аудита.")}
             )
+        limits = getattr(settings, "AUDIT_ATTACHMENT_LIMITS", {})
+        max_size_bytes = int(limits.get("max_size_bytes", 0) or 0)
+        if self.file and max_size_bytes:
+            try:
+                file_size = int(self.file.size)
+            except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
+                file_size = 0
+            if file_size > max_size_bytes:
+                limit_mb = max_size_bytes / (1024 * 1024)
+                raise ValidationError(
+                    {
+                        "file": _(
+                            "Размер файла превышает допустимый лимит %(limit).1f МБ."
+                        )
+                        % {"limit": limit_mb}
+                    }
+                )
+
+        attachment_qs = self.__class__.objects.filter(audit_id=self.audit_id)
+        if self.pk:
+            attachment_qs = attachment_qs.exclude(pk=self.pk)
+
+        max_per_audit = int(limits.get("max_per_audit", 0) or 0)
+        if max_per_audit and attachment_qs.count() >= max_per_audit:
+            raise ValidationError(
+                {
+                    "audit": _(
+                        "Превышено количество вложений для аудита: максимум %(limit)d файлов."
+                    )
+                    % {"limit": max_per_audit}
+                }
+            )
+
+        if self.response_id:
+            response_qs = self.__class__.objects.filter(response_id=self.response_id)
+            if self.pk:
+                response_qs = response_qs.exclude(pk=self.pk)
+            max_per_response = int(limits.get("max_per_response", 0) or 0)
+            if max_per_response and response_qs.count() >= max_per_response:
+                raise ValidationError(
+                    {
+                        "response": _(
+                            "Превышено количество вложений для ответа: максимум %(limit)d файлов."
+                        )
+                        % {"limit": max_per_response}
+                    }
+                )
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.full_clean()

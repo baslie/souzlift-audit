@@ -117,8 +117,6 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
-PROTECTED_MEDIA_ROOT = BASE_DIR / "protected_media"
-AUDIT_ATTACHMENT_URL_MAX_AGE = env_int("DJANGO_AUDIT_ATTACHMENT_URL_MAX_AGE", 300)
 AUDIT_ATTACHMENT_LIMITS = {
     "max_size_bytes": max(1, env_int("DJANGO_AUDIT_ATTACHMENT_MAX_SIZE", 8 * 1024 * 1024)),
     "max_per_response": max(1, env_int("DJANGO_AUDIT_ATTACHMENT_MAX_PER_RESPONSE", 10)),
@@ -139,6 +137,7 @@ EMAIL_USE_SSL = env_bool("DJANGO_EMAIL_USE_SSL", False)
 EMAIL_TIMEOUT = env_int("DJANGO_EMAIL_TIMEOUT", 10)
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "noreply@souzlift.local")
 SERVER_EMAIL = os.environ.get("DJANGO_SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+EMAIL_NOTIFICATIONS_ENABLED = env_bool("DJANGO_EMAIL_NOTIFICATIONS_ENABLED", False)
 
 LOGIN_URL = reverse_lazy("accounts:login")
 LOGIN_REDIRECT_URL = reverse_lazy("accounts:dashboard")
@@ -236,8 +235,7 @@ __all__ = [
     "STATICFILES_STORAGE",
     "MEDIA_URL",
     "MEDIA_ROOT",
-    "PROTECTED_MEDIA_ROOT",
-    "AUDIT_ATTACHMENT_URL_MAX_AGE",
+    "AUDIT_ATTACHMENT_LIMITS",
     "DEFAULT_AUTO_FIELD",
     "EMAIL_BACKEND",
     "EMAIL_HOST",
@@ -249,6 +247,7 @@ __all__ = [
     "EMAIL_TIMEOUT",
     "DEFAULT_FROM_EMAIL",
     "SERVER_EMAIL",
+    "EMAIL_NOTIFICATIONS_ENABLED",
     "LOGIN_URL",
     "LOGIN_REDIRECT_URL",
     "LOGOUT_REDIRECT_URL",

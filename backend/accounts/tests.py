@@ -12,6 +12,7 @@ from django.core import mail
 from django.http import HttpRequest
 from django.test import TestCase
 from django.test.client import RequestFactory
+from django.test.utils import override_settings
 from django.urls import resolve, reverse
 from django.utils import timezone
 
@@ -183,6 +184,7 @@ class QuerysetRestrictionTests(TestCase):
         self.assertEqual(list(filtered), [])
 
 
+@override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
 class UserNotificationTests(TestCase):
     def setUp(self) -> None:
         self.UserModel = get_user_model()
@@ -210,6 +212,34 @@ class UserNotificationTests(TestCase):
         )
 
         self.assertEqual(len(mail.outbox), 0)
+
+
+class EmailNotificationToggleTests(TestCase):
+    def setUp(self) -> None:
+        self.UserModel = get_user_model()
+
+    def test_notifications_disabled_by_default(self) -> None:
+        mail.outbox.clear()
+
+        self.UserModel.objects.create_user(
+            username="disabled-default",
+            email="disabled@example.com",
+            password="StrongPass123!",
+        )
+
+        self.assertEqual(mail.outbox, [])
+
+    def test_notifications_can_be_enabled(self) -> None:
+        mail.outbox.clear()
+
+        with override_settings(EMAIL_NOTIFICATIONS_ENABLED=True):
+            self.UserModel.objects.create_user(
+                username="enabled-user",
+                email="enabled@example.com",
+                password="StrongPass123!",
+            )
+
+        self.assertEqual(len(mail.outbox), 1)
 
 
 class PrimaryNavigationContextProcessorTests(TestCase):
