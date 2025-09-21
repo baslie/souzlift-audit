@@ -31,12 +31,9 @@ def user_password() -> str:
 @pytest.fixture(autouse=True)
 def _configure_test_environment(settings, tmp_path: Path) -> Iterator[None]:
     media_root = tmp_path / "media"
-    protected_root = tmp_path / "protected"
     media_root.mkdir(parents=True, exist_ok=True)
-    protected_root.mkdir(parents=True, exist_ok=True)
 
     settings.MEDIA_ROOT = str(media_root)
-    settings.PROTECTED_MEDIA_ROOT = str(protected_root)
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     settings.PASSWORD_HASHERS = [
         "django.contrib.auth.hashers.MD5PasswordHasher",

@@ -9,7 +9,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 TARGET_PATH="${TARGET_PATH:-$PROJECT_ROOT}"
 MEDIA_PATH="${MEDIA_PATH:-$PROJECT_ROOT/backend/media}"
-PROTECTED_MEDIA_PATH="${PROTECTED_MEDIA_PATH:-$PROJECT_ROOT/backend/protected_media}"
 WARN_THRESHOLD="${WARN_THRESHOLD:-80}"
 CRITICAL_THRESHOLD="${CRITICAL_THRESHOLD:-90}"
 
@@ -61,19 +60,6 @@ if [[ -d "$MEDIA_PATH" ]]; then
   log "Media directory size ($MEDIA_PATH): ${media_usage}"
 else
   log "Media directory not found: $MEDIA_PATH"
-fi
-
-if [[ -d "$PROTECTED_MEDIA_PATH" ]]; then
-  if ! protected_usage=$(du -sh "$PROTECTED_MEDIA_PATH" 2>/dev/null); then
-    if protected_k=$(du -sk "$PROTECTED_MEDIA_PATH" 2>/dev/null | awk '{print $1}'); then
-      protected_usage="${protected_k}K"
-    else
-      protected_usage="unknown"
-    fi
-  fi
-  log "Protected media size ($PROTECTED_MEDIA_PATH): ${protected_usage}"
-else
-  log "Protected media directory not found: $PROTECTED_MEDIA_PATH"
 fi
 
 exit "$exit_code"

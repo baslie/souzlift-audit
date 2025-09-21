@@ -84,6 +84,7 @@ PY
 | `DJANGO_MEDIA_ROOT` | Путь к каталогу медиа (`/opt/souzlift/backend/media`). |
 | `DJANGO_LOG_DIR` | Каталог логов (`/var/log/souzlift`). |
 | `DJANGO_EMAIL_*` | Почтовые настройки согласно [docs/runbooks/operations.md](operations.md). |
+| `DJANGO_EMAIL_NOTIFICATIONS_ENABLED` | Включение email-уведомлений (`true`/`false`, по умолчанию `false`). |
 | `DJANGO_SECURE_*` | HTTPS-настройки (HSTS, редиректы) в соответствии с политикой безопасности. |
 
 При необходимости добавьте переменные SMTP, OAuth и другие настройки, описанные в [docs/runbooks/operations.md](operations.md).
