@@ -10,7 +10,7 @@ from typing import IO, Iterable, Sequence
 import pandas as pd
 from django.db import transaction
 
-from .models import ChecklistItem, ChecklistTemplate
+from .models import ChecklistItem, ChecklistOptionDefinition, ChecklistTemplate
 
 # Column aliases are normalized using `_normalize_label`.
 _COLUMN_ALIASES: dict[str, set[str]] = {
@@ -75,7 +75,7 @@ class _ParsedRow:
     min_score: Decimal | None
     max_score: Decimal | None
     step: Decimal | None
-    options: list[str]
+    options: list[ChecklistOptionDefinition]
     requires_comment: bool
     weight: Decimal
 
@@ -159,7 +159,7 @@ def import_checklist_from_dataframe(
             min_score=parsed.min_score,
             max_score=parsed.max_score,
             step=parsed.step,
-            options=parsed.options,
+            options=[definition.serialized() for definition in parsed.options],
             requires_comment=parsed.requires_comment,
             weight=parsed.weight,
         )
@@ -260,7 +260,7 @@ def _prepare_dataframe(dataframe: pd.DataFrame) -> pd.DataFrame:
             rename_map[column] = canonical
     df = df.rename(columns=rename_map)
 
-    required_columns = {"question", "requires_comment"}
+    required_columns = {"question"}
     missing = sorted(column for column in required_columns if column not in df.columns)
     if missing:
         raise ChecklistImportError(
@@ -269,6 +269,9 @@ def _prepare_dataframe(dataframe: pd.DataFrame) -> pd.DataFrame:
                 + ", ".join(missing),
             ]
         )
+
+    if "requires_comment" not in df.columns:
+        df["requires_comment"] = False
 
     # Treat empty strings as missing values to allow forward fill.
     df = df.replace(r"^\s*$", pd.NA, regex=True)
@@ -323,9 +326,13 @@ def _parse_row(
 
     area = str(row.get("area", "") or "")
     category = str(row.get("category", "") or "")
-    help_text = str(row.get("help_text", "") or "")
+    raw_help_text = row.get("help_text", "")
+    help_text = str(raw_help_text or "")
 
-    options = _parse_options(row.get("options"), row_number=row_number)
+    options = _parse_option_definitions(
+        row.get("options"),
+        help_text=help_text,
+    )
     score_type = _parse_score_type(
         row.get("score_type"),
         options,
@@ -357,7 +364,7 @@ def _parse_row(
         if options:
             raise ChecklistImportRowError(
                 row_number,
-                "Для числового вопроса не требуется столбец options.",
+                "Для числового вопроса не требуется список вариантов.",
             )
     else:
         if not options:
@@ -413,14 +420,15 @@ def _parse_row(
 
 def _parse_score_type(
     raw_value: object,
-    options: Iterable[str],
+    options: Iterable[ChecklistOptionDefinition],
     *,
     row_number: int,
 ) -> str:
+    option_list = list(options)
     if raw_value is None:
         return (
             ChecklistItem.ScoreType.OPTION
-            if list(options)
+            if option_list
             else ChecklistItem.ScoreType.NUMERIC
         )
     text = _normalize_label(raw_value)
@@ -428,42 +436,122 @@ def _parse_score_type(
         return ChecklistItem.ScoreType.NUMERIC
     if text in _OPTION_ALIASES:
         return ChecklistItem.ScoreType.OPTION
+    if option_list:
+        return ChecklistItem.ScoreType.OPTION
+    raw_text = str(raw_value).strip()
+    if re.match(r"^-?\d+(?:[.,]\d+)?\s*[-–—]\s*-?\d+(?:[.,]\d+)?$", raw_text):
+        return ChecklistItem.ScoreType.NUMERIC
     raise ChecklistImportRowError(
         row_number,
         "Не удалось определить тип оценки: ожидается 'numeric' или 'option'.",
     )
 
 
-def _parse_options(value: object | None, *, row_number: int) -> list[str]:
+def _parse_option_definitions(
+    value: object | None,
+    *,
+    help_text: str,
+) -> list[ChecklistOptionDefinition]:
+    candidates = list(_iterate_option_candidates(value))
+    options: list[ChecklistOptionDefinition] = []
+
+    for candidate in candidates:
+        option = _build_option_definition(candidate)
+        if option is not None:
+            options.append(option)
+
+    if not options and help_text:
+        options.extend(_extract_options_from_help_text(help_text))
+
+    normalized: list[ChecklistOptionDefinition] = []
+    seen_labels: set[str] = set()
+    for option in options:
+        label_key = option.label.strip().lower()
+        if not label_key:
+            continue
+        if label_key in seen_labels:
+            continue
+        seen_labels.add(label_key)
+        normalized.append(option)
+    return normalized
+
+
+def _iterate_option_candidates(value: object | None) -> Iterable[object]:
     if value is None:
         return []
+    if isinstance(value, dict):
+        return [value]
     if isinstance(value, (list, tuple)):
-        candidates = list(value)
-    else:
-        text = str(value).strip()
-        if not text:
-            return []
-        try:
-            loaded = json.loads(text)
-        except json.JSONDecodeError:
-            candidates = re.split(r"[\n;|]+", text)
-        else:
-            candidates = loaded if isinstance(loaded, list) else [loaded]
+        return list(value)
+    text = str(value).strip()
+    if not text:
+        return []
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError:
+        parts = [part for part in re.split(r"[\n;|]+", text) if part.strip()]
+        return parts
+    if isinstance(loaded, list):
+        return loaded
+    return [loaded]
 
-    options: list[str] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        option_text = str(candidate).strip()
-        if not option_text:
-            continue
-        match = re.match(r"^\s*\d+[\s\-:]+(.+)$", option_text)
-        if match:
-            option_text = match.group(1).strip()
-        if option_text in seen:
-            continue
-        seen.add(option_text)
-        options.append(option_text)
+
+def _build_option_definition(candidate: object) -> ChecklistOptionDefinition | None:
+    if isinstance(candidate, ChecklistOptionDefinition):
+        return candidate
+    if isinstance(candidate, dict):
+        label = str(
+            candidate.get("label")
+            or candidate.get("text")
+            or candidate.get("name")
+            or "",
+        ).strip()
+        if not label:
+            return None
+        raw_value = (
+            candidate.get("value")
+            if "value" in candidate
+            else candidate.get("score")
+        )
+        value = _coerce_decimal(raw_value)
+        return ChecklistOptionDefinition(value=value, label=label)
+    text = str(candidate or "").strip()
+    if not text:
+        return None
+    match = re.match(r"^(?P<value>-?\d+(?:[.,]\d+)?)\s*[-–—:]+\s*(?P<label>.+)$", text)
+    if match:
+        value = _coerce_decimal(match.group("value"))
+        label = match.group("label").strip()
+        if label:
+            return ChecklistOptionDefinition(value=value, label=label)
+    return ChecklistOptionDefinition(value=None, label=text)
+
+
+def _extract_options_from_help_text(text: str) -> list[ChecklistOptionDefinition]:
+    pattern = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*[-–—:]")
+    matches = list(pattern.finditer(text))
+    options: list[ChecklistOptionDefinition] = []
+    if not matches:
+        return options
+    for index, match in enumerate(matches):
+        value = _coerce_decimal(match.group(1))
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        label = text[start:end].strip(" \t\n\r;,.•-·")
+        if label:
+            options.append(ChecklistOptionDefinition(value=value, label=label))
     return options
+
+
+def _coerce_decimal(value: object | None) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    try:
+        if isinstance(value, Decimal):
+            return value
+        return Decimal(str(value).strip().replace(" ", "").replace(",", "."))
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def _parse_bool(value: object | None, *, row_number: int) -> bool:
@@ -555,7 +643,10 @@ def _decimal_to_string(value: Decimal | None) -> str:
 def _serialize_options(item: ChecklistItem) -> str:
     if item.score_type != ChecklistItem.ScoreType.OPTION:
         return ""
-    return json.dumps(item.normalized_options(), ensure_ascii=False)
+    return json.dumps(
+        [definition.serialized() for definition in item.option_definitions()],
+        ensure_ascii=False,
+    )
 
 
 __all__ = [

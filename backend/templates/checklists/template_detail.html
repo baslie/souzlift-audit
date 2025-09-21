@@ -73,7 +73,7 @@
                   {% if item.score_type == 'numeric' %}
                     Диапазон: {{ item.min_score }} – {{ item.max_score }}, шаг {{ item.step }}
                   {% else %}
-                    Варианты: {{ item.normalized_options|join:", " }}
+                    Варианты: {{ item.formatted_options|join:", " }}
                   {% endif %}
                 </div>
               </div>

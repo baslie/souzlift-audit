@@ -234,10 +234,12 @@ class AuditResponse(models.Model):
                 errors.setdefault("selected_option", []).append(
                     _("Необходимо выбрать один из вариантов ответа."),
                 )
-            elif self.selected_option not in self.item.normalized_options():
-                errors.setdefault("selected_option", []).append(
-                    _("Выбран недопустимый вариант ответа."),
-                )
+            else:
+                option_definition = self.item.find_option_by_label(self.selected_option)
+                if option_definition is None:
+                    errors.setdefault("selected_option", []).append(
+                        _("Выбран недопустимый вариант ответа."),
+                    )
             if self.numeric_answer is not None:
                 errors.setdefault("numeric_answer", []).append(
                     _("Для вопросов с вариантами числовой ответ не используется."),
@@ -252,11 +254,14 @@ class AuditResponse(models.Model):
     def get_numeric_value(self) -> Decimal | None:
         """Return numeric equivalent of the response if available."""
 
-        if self.item.score_type != self.item.ScoreType.NUMERIC:
-            return None
-        if self.numeric_answer is None:
-            return None
-        return Decimal(self.numeric_answer)
+        if self.item.score_type == self.item.ScoreType.NUMERIC:
+            if self.numeric_answer is None:
+                return None
+            return Decimal(self.numeric_answer)
+        option_definition = self.item.find_option_by_label(self.selected_option)
+        if option_definition and option_definition.value is not None:
+            return Decimal(option_definition.value)
+        return None
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.full_clean()

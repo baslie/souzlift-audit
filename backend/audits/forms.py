@@ -79,10 +79,13 @@ class AuditItemForm(BootstrapFormMixin, forms.Form):
             option_field.widget = forms.HiddenInput()
             option_field.initial = ""
         else:
-            options = item.normalized_options()
+            options = list(item.option_definitions())
             option_field.widget = forms.Select(
                 choices=[("", _("Выберите вариант"))]
-                + [(choice, choice) for choice in options]
+                + [
+                    (option.label, option.display_label)
+                    for option in options
+                ]
             )
             numeric_field.widget = forms.HiddenInput()
             numeric_field.help_text = ""
@@ -130,7 +133,7 @@ class AuditItemForm(BootstrapFormMixin, forms.Form):
             cleaned["selected_option"] = ""
         else:
             option = cleaned.get("selected_option", "") or ""
-            if option and option not in item.normalized_options():
+            if option and item.find_option_by_label(option) is None:
                 self.add_error(
                     "selected_option",
                     _("Выбран недопустимый вариант ответа."),
