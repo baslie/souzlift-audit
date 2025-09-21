@@ -1,6 +1,7 @@
 """Setup helper for souzlift-audit on Windows.
 
-This script automates sections 2–6 of docs/guides/windows-dev.md:
+This script automates sections 2–6 of docs/guides/windows-dev.md and guarantees
+usage of Python 3.11 for the virtual environment:
 
 1. Ensures the repository exists at C:\\Users\\Roman\\Desktop\\souzlift-audit.
 2. Creates/updates the local virtual environment (.venv).
@@ -17,6 +18,7 @@ The script assumes Git and Python are on PATH.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -25,6 +27,7 @@ from pathlib import Path
 BASE_PATH = Path(r"C:\Users\Roman\Desktop")
 REPO_NAME = "souzlift-audit"
 DEFAULT_REPO_URL = "https://github.com/baslie/souzlift-audit.git"
+PYTHON_TARGET_VERSION = (3, 11)
 
 
 def run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -48,14 +51,50 @@ def ensure_repo(base_path: Path, repo_url: str) -> Path:
     return repo_path
 
 
-def ensure_venv(repo_path: Path) -> Path:
-    """Create a virtual environment if needed and return its python.exe path."""
+def ensure_python311() -> Path:
+    """Return path to Python 3.11 executable or abort with instructions."""
+
+    current = Path(sys.executable)
+    if sys.version_info[:2] == PYTHON_TARGET_VERSION:
+        return current
+
+    version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    message = (
+        "Требуется Python 3.11. Текущая активная версия: "
+        f"{version}. Запустите скрипт командой `py -3.11 scripts\\setup_windows_dev.py` "
+        "или через python.exe версии 3.11."
+    )
+    raise SystemExit(message)
+
+
+def ensure_venv(repo_path: Path, python311: Path) -> Path:
+    """Create or rebuild the virtual environment using Python 3.11."""
 
     venv_path = repo_path / ".venv"
     python_in_venv = venv_path / "Scripts" / "python.exe"
-    if not python_in_venv.exists():
-        print("Создаём виртуальное окружение .venv …")
-        run([sys.executable, "-m", "venv", str(venv_path)])
+
+    def venv_has_python311() -> bool:
+        if not python_in_venv.exists():
+            return False
+        try:
+            completed = subprocess.run(
+                [str(python_in_venv), "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            major_minor = tuple(int(part) for part in completed.stdout.strip().split())
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            return False
+        return major_minor == PYTHON_TARGET_VERSION
+
+    if not venv_has_python311():
+        if venv_path.exists():
+            print("Обнаружено виртуальное окружение с неверной версией Python — пересоздаём .venv …")
+            shutil.rmtree(venv_path, ignore_errors=True)
+        else:
+            print("Создаём виртуальное окружение .venv …")
+        run([str(python311), "-m", "venv", str(venv_path)])
     return python_in_venv
 
 
@@ -82,8 +121,9 @@ def apply_migrations(python_in_venv: Path, repo_path: Path) -> None:
 
 
 def main() -> None:
+    python311 = ensure_python311()
     repo_path = ensure_repo(BASE_PATH, DEFAULT_REPO_URL)
-    python_in_venv = ensure_venv(repo_path)
+    python_in_venv = ensure_venv(repo_path, python311)
     install_dependencies(python_in_venv, repo_path)
     apply_migrations(python_in_venv, repo_path)
     print(
