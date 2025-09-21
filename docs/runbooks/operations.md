@@ -33,7 +33,7 @@
 
 - На боевых серверах явно устанавливайте `DJANGO_ENV=prod` перед запуском служб `gunicorn` и фоновых задач.
 - Укажите переменные `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS` (список доменов через запятую) и, при необходимости, `DJANGO_CSRF_TRUSTED_ORIGINS` с префиксом `https://`.
-- Настройте почтовый шлюз через `DJANGO_EMAIL_HOST`, `DJANGO_EMAIL_PORT`, `DJANGO_EMAIL_HOST_USER`, `DJANGO_EMAIL_HOST_PASSWORD`, `DJANGO_EMAIL_USE_TLS`/`DJANGO_EMAIL_USE_SSL`, `DJANGO_DEFAULT_FROM_EMAIL`.
+- Настройте почтовый шлюз через `DJANGO_EMAIL_HOST`, `DJANGO_EMAIL_PORT`, `DJANGO_EMAIL_HOST_USER`, `DJANGO_EMAIL_HOST_PASSWORD`, `DJANGO_EMAIL_USE_TLS`/`DJANGO_EMAIL_USE_SSL`, `DJANGO_DEFAULT_FROM_EMAIL` и включите уведомления флагом `DJANGO_EMAIL_NOTIFICATIONS_ENABLED=true` при необходимости.
 - Для логирования задайте базовый каталог `DJANGO_LOG_DIR` (например, `/var/log/souzlift`), основной файл `DJANGO_LOG_FILE` с параметрами ротации `DJANGO_LOG_MAX_BYTES` и `DJANGO_LOG_BACKUP_COUNT`, а также отдельный журнал ошибок офлайн-синхронизации через `DJANGO_SYNC_LOG_FILE`, `DJANGO_SYNC_LOG_MAX_BYTES`, `DJANGO_SYNC_LOG_BACKUP_COUNT`.
 - Параметры HTTPS (HSTS, редиректы) можно скорректировать переменными `DJANGO_SECURE_SSL_REDIRECT`, `DJANGO_SECURE_HSTS_SECONDS`, `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS`, `DJANGO_SECURE_HSTS_PRELOAD`, `DJANGO_SECURE_REFERRER_POLICY` в зависимости от инфраструктуры заказчика.
 

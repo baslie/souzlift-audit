@@ -30,7 +30,7 @@
 - Конфигурация разделена на профили `dev` и `prod`. По умолчанию используется профиль разработки. Для переключения установите переменную окружения `DJANGO_ENV` в одно из значений: `dev`, `test`, `prod`.
 - Секретный ключ задаётся переменной `DJANGO_SECRET_KEY`. В режиме разработки допускается значение по умолчанию, но для тестовых/боевых стендов необходимо указать собственный ключ.
 - Список доменов и адресов, с которых разрешены запросы, задаётся через `DJANGO_ALLOWED_HOSTS` (перечисление через запятую). Для HTTPS-окружений дополнительно укажите `DJANGO_CSRF_TRUSTED_ORIGINS`.
-- Почтовые параметры управляются переменными `DJANGO_EMAIL_HOST`, `DJANGO_EMAIL_PORT`, `DJANGO_EMAIL_HOST_USER`, `DJANGO_EMAIL_HOST_PASSWORD`, `DJANGO_EMAIL_USE_TLS`, `DJANGO_EMAIL_USE_SSL`, `DJANGO_DEFAULT_FROM_EMAIL`. В профиле `dev` используется консольный backend, поэтому сообщения выводятся в терминал.
+- Почтовые параметры управляются переменными `DJANGO_EMAIL_HOST`, `DJANGO_EMAIL_PORT`, `DJANGO_EMAIL_HOST_USER`, `DJANGO_EMAIL_HOST_PASSWORD`, `DJANGO_EMAIL_USE_TLS`, `DJANGO_EMAIL_USE_SSL`, `DJANGO_DEFAULT_FROM_EMAIL`. Отправка уведомлений активируется отдельным флагом `DJANGO_EMAIL_NOTIFICATIONS_ENABLED` (по умолчанию `false`). В профиле `dev` используется консольный backend, поэтому сообщения выводятся в терминал.
 - Для настройки логирования доступны переменные:
   - `DJANGO_LOG_LEVEL` — уровень сообщений для консоли и файловых логов;
   - `DJANGO_LOG_DIR` — базовая директория для файлов журналов (по умолчанию `backend/logs`);
