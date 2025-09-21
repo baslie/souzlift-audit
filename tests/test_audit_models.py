@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 
 from audits.models import Audit, AuditResponse
 
@@ -79,3 +80,65 @@ def test_response_validates_range(audit_factory, checklist_item_factory, audit_r
     response = audit_response_factory.build(audit=audit, item=item, numeric_answer=7)
     with pytest.raises(ValidationError):
         response.full_clean()
+
+
+@pytest.mark.django_db
+def test_create_audit_defaults(
+    building_factory,
+    elevator_factory,
+    checklist_template_factory,
+    auditor_user,
+):
+    template = checklist_template_factory()
+    building = building_factory()
+    elevator = elevator_factory(building=building)
+
+    audit = Audit.objects.create(
+        building=building,
+        elevator=elevator,
+        template=template,
+        assigned_to=auditor_user,
+    )
+
+    assert audit.status == Audit.Status.DRAFT
+    assert audit.score == Decimal("0.00")
+    assert audit.is_editable
+    assert audit.submitted_at is None
+
+
+@pytest.mark.django_db
+def test_unique_draft_constraint_blocks_duplicate(audit_factory):
+    audit = audit_factory()
+
+    with pytest.raises(IntegrityError):
+        Audit.objects.create(
+            building=audit.building,
+            elevator=audit.elevator,
+            template=audit.template,
+            assigned_to=audit.assigned_to,
+            status=Audit.Status.DRAFT,
+        )
+
+
+@pytest.mark.django_db
+def test_deleting_response_recalculates_score(
+    audit_factory,
+    checklist_item_factory,
+    audit_response_factory,
+):
+    audit = audit_factory()
+    item_primary = checklist_item_factory(template=audit.template, order=1, weight=1)
+    item_secondary = checklist_item_factory(template=audit.template, order=2, weight=1)
+
+    audit_response_factory(audit=audit, item=item_primary, numeric_answer=5)
+    extra_response = audit_response_factory(audit=audit, item=item_secondary, numeric_answer=3)
+
+    audit.calculate_score()
+    audit.refresh_from_db()
+    assert audit.score == Decimal("4.00")
+
+    extra_response.delete()
+    audit.refresh_from_db()
+
+    assert audit.score == Decimal("5.00")
+    assert audit.responses.count() == 1
