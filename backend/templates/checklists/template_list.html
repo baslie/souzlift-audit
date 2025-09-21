@@ -2,49 +2,59 @@
 {% block title %}Чек-листы · Союзлифт Аудит{% endblock %}
 {% block heading %}Чек-листы{% endblock %}
 {% block subheading %}
-  <p class="text-sm text-ink-500">
-    Управляйте версиями чек-листов и просматривайте структуру вопросов перед назначением аудитов.
-  </p>
+  <p class="mb-0 text-body-secondary">Управляйте версиями чек-листов и просматривайте структуру вопросов перед назначением аудитов.</p>
 {% endblock %}
 {% block content %}
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
     {% for template in templates %}
-      <article class="rounded-xl border border-border bg-white p-5 shadow-sm">
-        <h2 class="text-lg font-semibold text-ink-900">{{ template.name }}</h2>
-        <p class="mt-2 text-sm text-ink-600">{{ template.description|default:"Описание не задано" }}</p>
-        <dl class="mt-4 space-y-2 text-xs text-ink-500">
-          <div>
-            <dt class="uppercase tracking-wide">Опубликован</dt>
-            <dd>
-              {% if template.published_at %}
-                {{ template.published_at|date:"d.m.Y" }}
-              {% else %}
-                <span class="text-ink-400">Не опубликован</span>
-              {% endif %}
-            </dd>
+      <div class="col">
+        <article class="card h-100 shadow-sm">
+          <div class="card-body d-flex flex-column gap-3">
+            <div>
+              <h2 class="h5 mb-1">{{ template.name }}</h2>
+              <p class="mb-0 text-body-secondary">{{ template.description|default:"Описание не задано" }}</p>
+            </div>
+            <dl class="row g-2 small text-body-secondary mb-0">
+              <div class="col-6">
+                <dt class="text-uppercase text-muted">Опубликован</dt>
+                <dd class="mb-0">
+                  {% if template.published_at %}
+                    {{ template.published_at|date:"d.m.Y" }}
+                  {% else %}
+                    <span class="text-body-tertiary">Не опубликован</span>
+                  {% endif %}
+                </dd>
+              </div>
+              <div class="col-6">
+                <dt class="text-uppercase text-muted">Пунктов</dt>
+                <dd class="mb-0">{{ template.items.count }}</dd>
+              </div>
+            </dl>
+            <div class="mt-auto">
+              <a href="{% url 'checklists:template-detail' template.pk %}" class="btn btn-outline-secondary btn-sm">Открыть</a>
+            </div>
           </div>
-          <div>
-            <dt class="uppercase tracking-wide">Пунктов</dt>
-            <dd>{{ template.items.count }}</dd>
-          </div>
-        </dl>
-        <a href="{% url 'checklists:template-detail' template.pk %}" class="btn btn--secondary mt-4 inline-flex text-xs">Открыть</a>
-      </article>
+        </article>
+      </div>
     {% empty %}
-      <div class="rounded-xl border border-dashed border-border bg-surface-subtle px-4 py-6 text-sm text-ink-500">
-        Шаблоны чек-листов ещё не созданы.
+      <div class="col">
+        <div class="alert alert-secondary mb-0" role="alert">Шаблоны чек-листов ещё не созданы.</div>
       </div>
     {% endfor %}
   </div>
   {% if is_paginated %}
-    <div class="mt-6 flex items-center justify-between text-xs text-ink-500">
+    <div class="d-flex justify-content-between align-items-center mt-3 small text-body-secondary">
       <span>Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
-      <div class="flex items-center gap-2">
+      <div class="d-flex gap-2">
         {% if page_obj.has_previous %}
-          <a href="?page={{ page_obj.previous_page_number }}" class="btn btn--secondary text-xs">Назад</a>
+          <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-outline-secondary btn-sm">Назад</a>
+        {% else %}
+          <span class="btn btn-outline-secondary btn-sm disabled">Назад</span>
         {% endif %}
         {% if page_obj.has_next %}
-          <a href="?page={{ page_obj.next_page_number }}" class="btn btn--secondary text-xs">Вперёд</a>
+          <a href="?page={{ page_obj.next_page_number }}" class="btn btn-outline-secondary btn-sm">Вперёд</a>
+        {% else %}
+          <span class="btn btn-outline-secondary btn-sm disabled">Вперёд</span>
         {% endif %}
       </div>
     </div>

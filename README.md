@@ -19,10 +19,10 @@
 |-----------|-------------------------|
 | Backend   | Python 3.11, Django 5.x |
 | База данных | SQLite (файл `backend/db/db.sqlite3`) |
-| UI        | Django Templates, Tailwind CSS (предсобранный CSS), Alpine.js и HTMX по требованию |
+| UI        | Django Templates, Bootstrap 5 (предсобранные CSS/JS) |
 | Тесты     | `pytest`, `pytest-django`, `factory-boy`, `ruff` |
 
-Зависимости Python перечислены в [requirements.txt](requirements.txt). Tailwind настраивается через `tailwind.config.js` и исходник `backend/static/css/tailwind.src.css`.
+Зависимости Python перечислены в [requirements.txt](requirements.txt). Стили Bootstrap подключаются локально из каталога `backend/static/`.
 
 ## Структура репозитория
 

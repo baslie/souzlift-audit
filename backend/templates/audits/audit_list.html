@@ -2,85 +2,85 @@
 {% block title %}Аудиты · Союзлифт Аудит{% endblock %}
 {% block heading %}Аудиты{% endblock %}
 {% block subheading %}
-  <p class="text-sm text-ink-500">
-    Просматривайте назначенные проверки и переходите к карточке аудита для заполнения ответов и проверки результатов.
-  </p>
+  <p class="mb-0 text-body-secondary">Просматривайте назначенные проверки и переходите к карточке аудита для заполнения ответов и проверки результатов.</p>
 {% endblock %}
 {% block content %}
-  <div class="space-y-6">
-    <div class="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-      <table class="min-w-full divide-y divide-border-subtle text-sm">
-        <thead class="bg-surface-subtle text-xs font-semibold uppercase tracking-wide text-ink-500">
+  <div class="d-flex flex-column gap-4">
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead class="table-light text-uppercase small">
           <tr>
-            <th class="px-4 py-3 text-left">Здание</th>
-            <th class="px-4 py-3 text-left">Лифт</th>
-            <th class="px-4 py-3 text-left">Чек-лист</th>
-            <th class="px-4 py-3 text-left">Статус</th>
-            <th class="px-4 py-3 text-left">Исполнитель</th>
-            <th class="px-4 py-3 text-left">Дедлайн</th>
-            <th class="px-4 py-3 text-left">Баллы</th>
-            <th class="px-4 py-3 text-right">Действия</th>
+            <th scope="col">Здание</th>
+            <th scope="col">Лифт</th>
+            <th scope="col">Чек-лист</th>
+            <th scope="col">Статус</th>
+            <th scope="col">Исполнитель</th>
+            <th scope="col">Дедлайн</th>
+            <th scope="col">Баллы</th>
+            <th scope="col" class="text-end">Действия</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-border-subtle text-ink-700">
+        <tbody>
           {% for audit in audits %}
-            <tr class="hover:bg-surface-subtle/60">
-              <td class="px-4 py-3 align-top">
-                <div class="font-medium">{{ audit.building.address }}</div>
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ audit.building.address }}</div>
                 {% if audit.building.entrance %}
-                  <div class="text-xs text-ink-500">Подъезд {{ audit.building.entrance }}</div>
+                  <div class="small text-body-secondary">Подъезд {{ audit.building.entrance }}</div>
                 {% endif %}
               </td>
-              <td class="px-4 py-3 align-top">
-                <div class="font-medium">{{ audit.elevator.identifier }}</div>
-                <div class="text-xs text-ink-500">{{ audit.elevator.get_status_display }}</div>
+              <td>
+                <div class="fw-semibold">{{ audit.elevator.identifier }}</div>
+                <div class="small text-body-secondary">{{ audit.elevator.get_status_display }}</div>
               </td>
-              <td class="px-4 py-3 align-top">{{ audit.template.name }}</td>
-              <td class="px-4 py-3 align-top">
-                <span class="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold">
-                  {{ audit.get_status_display }}
-                </span>
+              <td>{{ audit.template.name }}</td>
+              <td>
+                {% if audit.status == audit.Status.SUBMITTED %}
+                  <span class="badge text-bg-success">{{ audit.get_status_display }}</span>
+                {% else %}
+                  <span class="badge text-bg-primary">{{ audit.get_status_display }}</span>
+                {% endif %}
               </td>
-              <td class="px-4 py-3 align-top">
+              <td>
                 {% if audit.assigned_to %}
                   {{ audit.assigned_to.get_full_name|default:audit.assigned_to.username }}
                 {% else %}
-                  <span class="text-xs text-ink-400">Не назначено</span>
+                  <span class="text-body-tertiary">Не назначено</span>
                 {% endif %}
               </td>
-              <td class="px-4 py-3 align-top">
+              <td>
                 {% if audit.deadline %}
                   {{ audit.deadline|date:"d.m.Y" }}
                 {% else %}
-                  <span class="text-xs text-ink-400">—</span>
+                  <span class="text-body-tertiary">—</span>
                 {% endif %}
               </td>
-              <td class="px-4 py-3 align-top">{{ audit.score }}</td>
-              <td class="px-4 py-3 text-right align-top">
-                <a href="{% url 'audits:audit-detail' audit.pk %}" class="btn btn--secondary text-xs">Открыть</a>
+              <td>{{ audit.score }}</td>
+              <td class="text-end">
+                <a href="{% url 'audits:audit-detail' audit.pk %}" class="btn btn-outline-secondary btn-sm">Открыть</a>
               </td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="8" class="px-4 py-6 text-center text-sm text-ink-500">
-                Аудиты пока не созданы.
-              </td>
+              <td colspan="8" class="text-center text-body-secondary py-4">Аудиты пока не созданы.</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     {% if is_paginated %}
-      <div class="flex items-center justify-between text-xs text-ink-500">
-        <span>
-          Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}
-        </span>
-        <div class="flex items-center gap-2">
+      <div class="d-flex justify-content-between align-items-center small text-body-secondary">
+        <span>Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
+        <div class="d-flex gap-2">
           {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}" class="btn btn--secondary text-xs">Назад</a>
+            <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-outline-secondary btn-sm">Назад</a>
+          {% else %}
+            <span class="btn btn-outline-secondary btn-sm disabled">Назад</span>
           {% endif %}
           {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}" class="btn btn--secondary text-xs">Вперёд</a>
+            <a href="?page={{ page_obj.next_page_number }}" class="btn btn-outline-secondary btn-sm">Вперёд</a>
+          {% else %}
+            <span class="btn btn-outline-secondary btn-sm disabled">Вперёд</span>
           {% endif %}
         </div>
       </div>

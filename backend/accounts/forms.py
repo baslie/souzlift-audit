@@ -7,19 +7,18 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 
-class TailwindFormMixin:
-    """Общие настройки оформления для форм и элементов ввода."""
+class BootstrapFormMixin:
+    """Общие настройки оформления для форм и элементов ввода под Bootstrap."""
 
-    input_css_classes = "app-input"
-    textarea_css_classes = "app-input app-input--textarea"
-    select_css_classes = "app-input app-input--select"
-    file_css_classes = "app-input app-input--file"
-    checkbox_css_classes = "app-checkbox"
-    error_css_classes = "form-error"
-    help_text_css_classes = "form-help"
+    input_css_classes = "form-control"
+    textarea_css_classes = "form-control"
+    select_css_classes = "form-select"
+    file_css_classes = "form-control"
+    checkbox_css_classes = "form-check-input"
+    help_text_css_classes = "form-text"
 
     def _apply_styling(self) -> None:
-        for field in self.fields.values():
+        for name, field in self.fields.items():
             widget = field.widget
             css_classes = widget.attrs.get("class", "").strip()
             if isinstance(widget, forms.Textarea):
@@ -33,14 +32,23 @@ class TailwindFormMixin:
             else:
                 base_classes = self.input_css_classes
 
-            widget.attrs["class"] = " ".join(filter(None, [css_classes, base_classes]))
+            bound_field = self[name]
+            errors = getattr(bound_field, "errors", ())
+
+            classes = " ".join(filter(None, [css_classes, base_classes]))
+            if errors and base_classes != self.checkbox_css_classes:
+                classes = f"{classes} is-invalid".strip()
+
+            widget.attrs["class"] = classes
 
             if isinstance(widget, forms.CheckboxInput):
                 widget.attrs.setdefault("aria-checked", "false")
+                if errors:
+                    widget.attrs["class"] = f"{widget.attrs['class']} is-invalid".strip()
 
             if field.help_text:
                 field.help_text = format_html(
-                    '<span class="{}">{}</span>', self.help_text_css_classes, field.help_text
+                    '<div class="{}">{}</div>', self.help_text_css_classes, field.help_text
                 )
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -48,7 +56,7 @@ class TailwindFormMixin:
         self._apply_styling()
 
 
-class StyledAuthenticationForm(TailwindFormMixin, AuthenticationForm):
+class StyledAuthenticationForm(BootstrapFormMixin, AuthenticationForm):
     """Форма входа с едиными стилями."""
 
     username = UsernameField(
@@ -62,7 +70,7 @@ class StyledAuthenticationForm(TailwindFormMixin, AuthenticationForm):
     )
 
 
-class StyledPasswordChangeForm(TailwindFormMixin, PasswordChangeForm):
+class StyledPasswordChangeForm(BootstrapFormMixin, PasswordChangeForm):
     """Форма смены пароля с пользовательским оформлением."""
 
     old_password = forms.CharField(

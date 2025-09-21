@@ -1,0 +1,48 @@
+body {
+  background-color: #f8f9fa;
+}
+
+.app-brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background-color: var(--bs-primary);
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.page-header {
+  margin-bottom: 1.5rem;
+}
+
+.page-header .page-title {
+  margin-bottom: 0.25rem;
+}
+
+.page-header .page-subtitle {
+  color: var(--bs-secondary-color);
+  margin-bottom: 0;
+}
+
+.content-card {
+  background-color: #fff;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(33, 37, 41, 0.1);
+  box-shadow: 0 0.75rem 1.5rem rgba(33, 37, 41, 0.08);
+}
+
+.content-card .card-body {
+  padding: 1.5rem;
+}
+
+.table-nowrap {
+  white-space: nowrap;
+}
+
+.footer-muted {
+  color: var(--bs-secondary-color);
+}

@@ -29,5 +29,5 @@ LOGGING["loggers"]["django"]["handlers"] = ["console"]
 LOGGING["root"]["level"] = "DEBUG" if DEBUG else LOG_LEVEL
 
 # В режиме разработки и тестирования используем обычное хранение статики,
-# чтобы избежать ошибок manifest при отсутствии сборки Tailwind.
+# чтобы избегать ошибок manifest и работать с предсобранным Bootstrap.
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
