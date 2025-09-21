@@ -103,14 +103,14 @@ class Audit(models.Model):
         return self.status == self.Status.DRAFT
 
     def mark_submitted(self, *, commit: bool = True) -> None:
-        """Transition audit to submitted status and persist timestamp."""
+        """Transition audit to submitted status, ensure score is up-to-date."""
 
-        if self.status == self.Status.SUBMITTED:
-            return
+        self.calculate_score(commit=False)
+        if self.submitted_at is None:
+            self.submitted_at = timezone.now()
         self.status = self.Status.SUBMITTED
-        self.submitted_at = timezone.now()
         if commit:
-            self.save(update_fields=["status", "submitted_at", "updated_at"])
+            self.save(update_fields=["status", "submitted_at", "score", "updated_at"])
 
     def request_changes(self, *, comment: str | None = None, commit: bool = True) -> None:
         """Return audit to draft state with administrator comment."""
@@ -131,7 +131,9 @@ class Audit(models.Model):
             value = response.get_numeric_value()
             if value is None:
                 continue
-            weight = response.item.weight
+            weight = response.item.weight or Decimal("0")
+            if weight <= 0:
+                continue
             total_weight += weight
             total_value += weight * value
         if total_weight > 0:
@@ -261,6 +263,12 @@ class AuditResponse(models.Model):
         super().save(*args, **kwargs)
         # Update audit score eagerly to keep cached value in sync.
         self.audit.calculate_score(commit=True)
+
+    def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
+        audit = self.audit
+        result = super().delete(*args, **kwargs)
+        audit.calculate_score(commit=True)
+        return result
 
 
 class AuditAttachment(models.Model):
