@@ -23,9 +23,13 @@ _ACTIVE_VIEW_MAP: dict[str, str] = {
     "catalog:building-list": "buildings",
     "catalog:building-create": "buildings",
     "catalog:building-update": "buildings",
+    "catalog:building-delete": "buildings",
+    "catalog:building-import": "buildings",
     "catalog:elevator-list": "elevators",
     "catalog:elevator-create": "elevators",
     "catalog:elevator-update": "elevators",
+    "catalog:elevator-delete": "elevators",
+    "catalog:elevator-import": "elevators",
     "checklists:template-list": "checklists",
     "checklists:template-detail": "checklists",
 }

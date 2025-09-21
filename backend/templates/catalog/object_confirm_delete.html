@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Удаление записи · Союзлифт Аудит{% endblock %}
+{% block heading %}Удаление {{ object._meta.verbose_name|capfirst }}{% endblock %}
+{% block subheading %}
+  <p class="mb-0 text-body-secondary">Подтвердите удаление. Действие необратимо, но при необходимости запись можно создать снова.</p>
+{% endblock %}
+{% block content %}
+  <form method="post">
+    {% csrf_token %}
+    <p class="mb-4">
+      Вы уверены, что хотите удалить «<strong>{{ object }}</strong>»?
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+      <button type="submit" class="btn btn-danger">Удалить</button>
+      <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

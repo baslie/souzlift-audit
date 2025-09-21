@@ -1,181 +1,403 @@
-"""Views for managing catalog entities."""
+"""Views for managing catalog entities and imports."""
 from __future__ import annotations
 
-from typing import Iterable
+import json
+from typing import Any, Sequence
 
 from django.contrib import messages
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
+from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import CreateView, ListView, UpdateView
+from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
 
 from accounts.models import UserProfile
-from accounts.permissions import RoleRequiredMixin
+from accounts.permissions import AdminRequiredMixin, RoleRequiredMixin
 
-from .forms import BuildingForm, ElevatorForm
-from .models import Building, Elevator, ReviewStatus
+from .forms import (
+    BuildingForm,
+    CatalogImportConfirmForm,
+    CatalogImportUploadForm,
+    ElevatorForm,
+)
+from .models import Building, CatalogImportLog, Elevator, ReviewStatus
+from .services import (
+    CatalogImportError,
+    CatalogImportExecutionError,
+    CatalogImportPreview,
+    CatalogImportResult,
+    build_building_preview,
+    build_elevator_preview,
+    import_buildings,
+    import_elevators,
+)
 
 
-class VisibleForUserQuerysetMixin(RoleRequiredMixin):
-    model = Building
+class CatalogListView(RoleRequiredMixin, ListView):
+    """Base list view with shared search behaviour for catalog entities."""
+
     allowed_roles = (UserProfile.Roles.ADMIN, UserProfile.Roles.AUDITOR)
-
-    def prepare_queryset(self, queryset: QuerySet) -> QuerySet:
-        return queryset
-
-    def get_queryset(self) -> QuerySet:  # type: ignore[override]
-        queryset = self.model.objects.visible_for_user(self.request.user)
-        return self.prepare_queryset(queryset)
-
-    @property
-    def profile(self) -> UserProfile | None:
-        return getattr(self.request.user, "profile", None)
-
-
-class BaseCatalogListView(VisibleForUserQuerysetMixin, ListView):
-    paginate_by = 20
-    ordering = "-created_at"
-    status_param = "status"
     search_param = "q"
-
-    def get_status_choices(self) -> Iterable[tuple[str, str]]:
-        return (
-            ("", _("Все статусы")),
-            (ReviewStatus.PENDING, _("Ожидают утверждения")),
-            (ReviewStatus.APPROVED, _("Утверждённые")),
-            (ReviewStatus.REJECTED, _("Отклонённые")),
-            ("mine", _("Созданные мной")),
-        )
-
-    def get_status_filter(self) -> str:
-        value = self.request.GET.get(self.status_param, "").strip()
-        valid_values = {choice for choice, _ in self.get_status_choices() if choice}
-        if value in valid_values or value == "mine":
-            return value
-        return ""
+    paginate_by = 25
 
     def get_search_query(self) -> str:
         return self.request.GET.get(self.search_param, "").strip()
 
-    def filter_queryset_by_status(self, queryset: QuerySet) -> QuerySet:
-        status = self.get_status_filter()
-        if not status:
-            return queryset
-        if status == "mine":
-            return queryset.filter(created_by=self.request.user)
-        return queryset.filter(review_status=status)
-
-    def apply_search(self, queryset: QuerySet) -> QuerySet:
-        query = self.get_search_query()
-        if not query:
-            return queryset
-        return queryset.filter(self.get_search_filter(query))
-
-    def get_search_filter(self, query: str) -> Q:
-        raise NotImplementedError
-
     def get_queryset(self) -> QuerySet:  # type: ignore[override]
-        queryset = super().get_queryset().order_by(self.ordering)
-        queryset = self.filter_queryset_by_status(queryset)
-        return self.apply_search(queryset)
+        queryset = super().get_queryset()
+        query = self.get_search_query()
+        if query:
+            queryset = queryset.filter(self.get_search_filter(query))
+        return queryset
 
-    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:  # type: ignore[override]
         context = super().get_context_data(**kwargs)
         context.update(
             {
-                "status_choices": list(self.get_status_choices()),
-                "selected_status": self.get_status_filter(),
-                "search_query": self.get_search_query(),
                 "search_param": self.search_param,
-                "status_param": self.status_param,
-                "can_moderate": bool(self.profile and self.profile.is_admin),
-                "ReviewStatus": ReviewStatus,
+                "search_query": self.get_search_query(),
+                "can_manage": bool(self.profile and self.profile.is_admin),
             }
         )
         return context
 
+    def get_search_filter(self, query: str) -> Q:
+        raise NotImplementedError
 
-class BuildingListView(BaseCatalogListView):
+
+class BuildingListView(CatalogListView):
     model = Building
     template_name = "catalog/building_list.html"
 
-    def prepare_queryset(self, queryset: QuerySet) -> QuerySet:  # type: ignore[override]
-        return queryset.select_related("created_by__profile", "verified_by__profile")
+    def get_queryset(self) -> QuerySet:  # type: ignore[override]
+        queryset = (
+            Building.objects.visible_for_user(self.request.user)
+            .annotate(elevator_count=Count("elevators"))
+            .select_related("created_by__profile")
+            .order_by("address", "entrance")
+        )
+        query = self.get_search_query()
+        if query:
+            queryset = queryset.filter(
+                Q(address__icontains=query)
+                | Q(entrance__icontains=query)
+                | Q(notes__icontains=query)
+            )
+        return queryset
 
-    def get_search_filter(self, query: str) -> Q:
-        return Q(address__icontains=query) | Q(entrance__icontains=query) | Q(notes__icontains=query)
 
-
-class ElevatorListView(BaseCatalogListView):
+class ElevatorListView(CatalogListView):
     model = Elevator
     template_name = "catalog/elevator_list.html"
 
-    def prepare_queryset(self, queryset: QuerySet) -> QuerySet:  # type: ignore[override]
-        return queryset.select_related("building", "created_by__profile", "verified_by__profile")
+    def get_queryset(self) -> QuerySet:  # type: ignore[override]
+        queryset = (
+            Elevator.objects.visible_for_user(self.request.user)
+            .select_related("building", "created_by__profile")
+            .order_by("building__address", "identifier")
+        )
+        query = self.get_search_query()
+        if query:
+            queryset = queryset.filter(
+                Q(identifier__icontains=query)
+                | Q(description__icontains=query)
+                | Q(building__address__icontains=query)
+            )
+        return queryset
 
-    def get_search_filter(self, query: str) -> Q:
+
+class CatalogAdminFormMixin(AdminRequiredMixin):
+    """Shared logic for create and update views in the catalog."""
+
+    success_message: str = ""
+    success_url: str | None = None
+
+    def get_success_url(self) -> str:
+        if self.success_url is None:
+            raise NotImplementedError("success_url must be defined")
+        return str(self.success_url)
+
+    def form_valid(self, form):  # type: ignore[override]
+        instance = form.save(commit=False)
+        user = self.request.user
+        if getattr(user, "is_authenticated", False):
+            if getattr(instance, "created_by_id", None) is None:
+                instance.created_by = user
+            if hasattr(instance, "verified_by"):
+                instance.verified_by = user
+            if hasattr(instance, "verified_at"):
+                instance.verified_at = timezone.now()
+        if hasattr(instance, "review_status"):
+            instance.review_status = ReviewStatus.APPROVED
+        instance.save()
+        form.save_m2m()
+        self.object = instance
+        if self.success_message:
+            messages.success(self.request, self.success_message)
+        return HttpResponseRedirect(self.get_success_url())
+
+
+class BuildingCreateView(CatalogAdminFormMixin, CreateView):
+    model = Building
+    form_class = BuildingForm
+    template_name = "catalog/building_form.html"
+    success_url = reverse_lazy("catalog:building-list")
+    success_message = _("Здание сохранено.")
+
+
+class BuildingUpdateView(CatalogAdminFormMixin, UpdateView):
+    model = Building
+    form_class = BuildingForm
+    template_name = "catalog/building_form.html"
+    success_url = reverse_lazy("catalog:building-list")
+    success_message = _("Изменения сохранены.")
+
+
+class BuildingDeleteView(AdminRequiredMixin, DeleteView):
+    model = Building
+    template_name = "catalog/object_confirm_delete.html"
+    success_url = reverse_lazy("catalog:building-list")
+    success_message = _("Здание удалено.")
+
+    def delete(self, request, *args: Any, **kwargs: Any):  # type: ignore[override]
+        response = super().delete(request, *args, **kwargs)
+        messages.success(self.request, self.success_message)
+        return response
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:  # type: ignore[override]
+        context = super().get_context_data(**kwargs)
+        context["cancel_url"] = str(self.success_url)
+        return context
+
+
+class ElevatorCreateView(CatalogAdminFormMixin, CreateView):
+    model = Elevator
+    form_class = ElevatorForm
+    template_name = "catalog/elevator_form.html"
+    success_url = reverse_lazy("catalog:elevator-list")
+    success_message = _("Лифт сохранён.")
+
+    def get_form_kwargs(self):  # type: ignore[override]
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+
+class ElevatorUpdateView(CatalogAdminFormMixin, UpdateView):
+    model = Elevator
+    form_class = ElevatorForm
+    template_name = "catalog/elevator_form.html"
+    success_url = reverse_lazy("catalog:elevator-list")
+    success_message = _("Изменения сохранены.")
+
+    def get_form_kwargs(self):  # type: ignore[override]
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+
+class ElevatorDeleteView(AdminRequiredMixin, DeleteView):
+    model = Elevator
+    template_name = "catalog/object_confirm_delete.html"
+    success_url = reverse_lazy("catalog:elevator-list")
+    success_message = _("Лифт удалён.")
+
+    def delete(self, request, *args: Any, **kwargs: Any):  # type: ignore[override]
+        response = super().delete(request, *args, **kwargs)
+        messages.success(self.request, self.success_message)
+        return response
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:  # type: ignore[override]
+        context = super().get_context_data(**kwargs)
+        context["cancel_url"] = str(self.success_url)
+        return context
+
+
+class BaseCatalogImportView(AdminRequiredMixin, TemplateView):
+    """Shared logic for building and elevator import flows."""
+
+    template_name = "catalog/import_form.html"
+    upload_form_class = CatalogImportUploadForm
+    confirm_form_class = CatalogImportConfirmForm
+    success_url = ""
+    success_message = _("Импорт завершён успешно.")
+    entity: CatalogImportLog.Entity
+    expected_columns: Sequence[tuple[str, str]] = ()
+    page_title: str = ""
+    page_subtitle: str = ""
+
+    def get_success_url(self) -> str:
+        if not self.success_url:
+            raise NotImplementedError("success_url must be defined")
+        return str(self.success_url)
+
+    def get_preview(self, uploaded_file) -> CatalogImportPreview:
+        raise NotImplementedError
+
+    def run_import(self, rows: Sequence[dict[str, Any]]) -> CatalogImportResult:
+        raise NotImplementedError
+
+    def get_logs(self) -> QuerySet:
         return (
-            Q(identifier__icontains=query)
-            | Q(description__icontains=query)
-            | Q(building__address__icontains=query)
+            CatalogImportLog.objects.filter(entity=self.entity)
+            .select_related("created_by__profile")
+            .order_by("-created_at")[:10]
+        )
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:  # type: ignore[override]
+        context = super().get_context_data(**kwargs)
+        context.setdefault("upload_form", self.upload_form_class())
+        context.setdefault("confirm_form", self.confirm_form_class())
+        context.setdefault("preview", None)
+        context.setdefault("page_title", self.page_title)
+        context.setdefault("page_subtitle", self.page_subtitle)
+        context.setdefault("expected_columns", self.expected_columns)
+        context["logs"] = self.get_logs()
+        return context
+
+    def post(self, request, *args: Any, **kwargs: Any):  # type: ignore[override]
+        if "payload" in request.POST:
+            return self._handle_confirm(request)
+        return self._handle_upload(request)
+
+    def _handle_upload(self, request):
+        upload_form = self.upload_form_class(request.POST, request.FILES)
+        if not upload_form.is_valid():
+            return self.render_to_response(self.get_context_data(upload_form=upload_form))
+
+        uploaded_file = upload_form.cleaned_data["file"]
+        try:
+            preview = self.get_preview(uploaded_file)
+        except CatalogImportError as exc:
+            messages.error(request, str(exc))
+            return self.render_to_response(self.get_context_data(upload_form=self.upload_form_class()))
+
+        if not preview.rows:
+            messages.warning(request, _("Файл не содержит данных для импорта."))
+
+        if preview.has_errors:
+            messages.warning(
+                request,
+                _(
+                    "Некоторые строки содержат ошибки и не будут импортированы. Исправьте файл или продолжите для загрузки корректных записей."
+                ),
+            )
+
+        payload = json.dumps(preview.build_payload())
+        confirm_form = self.confirm_form_class(initial={"payload": payload, "filename": preview.filename})
+        context = self.get_context_data(
+            preview=preview,
+            upload_form=self.upload_form_class(),
+            confirm_form=confirm_form,
+        )
+        context["payload"] = payload
+        context["filename"] = preview.filename
+        return self.render_to_response(context)
+
+    def _handle_confirm(self, request):
+        confirm_form = self.confirm_form_class(request.POST)
+        if not confirm_form.is_valid():
+            messages.error(request, _("Не удалось подтвердить импорт. Повторите попытку."))
+            return self.render_to_response(self.get_context_data(confirm_form=confirm_form))
+
+        payload_raw = confirm_form.cleaned_data["payload"]
+        filename = confirm_form.cleaned_data.get("filename", "")
+        try:
+            rows = json.loads(payload_raw)
+        except json.JSONDecodeError:
+            messages.error(request, _("Переданы некорректные данные импорта."))
+            return self.render_to_response(self.get_context_data())
+
+        if not rows:
+            messages.warning(request, _("Нет данных для импорта."))
+            return self.render_to_response(self.get_context_data())
+
+        try:
+            result = self.run_import(rows)
+        except CatalogImportExecutionError as exc:
+            self._create_log(filename, exc.result, CatalogImportLog.Status.FAILED)
+            messages.error(
+                request,
+                _("Импорт не выполнен из-за ошибок. Подробности см. в журнале ниже."),
+            )
+            return self.render_to_response(self.get_context_data())
+
+        self._create_log(filename, result, CatalogImportLog.Status.SUCCESS)
+        messages.success(request, self.success_message)
+        return redirect(self.get_success_url())
+
+    def _create_log(
+        self,
+        filename: str,
+        result: CatalogImportResult,
+        status: CatalogImportLog.Status,
+    ) -> None:
+        CatalogImportLog.objects.create(
+            entity=self.entity,
+            status=status,
+            filename=filename or "",
+            created_by=self.request.user if self.request.user.is_authenticated else None,
+            total_rows=result.total_rows,
+            created_count=result.created_count,
+            updated_count=result.updated_count,
+            error_rows=result.error_payload(),
+            message=self.success_message if status == CatalogImportLog.Status.SUCCESS else "",
         )
 
 
-class CatalogFormMixin(VisibleForUserQuerysetMixin):
-    success_url: str | None = None
-    success_message: str = ""
-
-    def get_success_url(self) -> str:
-        if self.success_url is not None:
-            return str(self.success_url)
-        raise NotImplementedError("success_url must be defined")
-
-    def form_valid(self, form):  # type: ignore[override]
-        if form.instance.created_by_id is None:
-            form.instance.created_by = self.request.user
-        response = super().form_valid(form)
-        if self.success_message:
-            messages.success(self.request, self.success_message)
-        return response
-
-
-class BuildingCreateView(CatalogFormMixin, CreateView):
-    model = Building
-    form_class = BuildingForm
-    template_name = "catalog/building_form.html"
+class BuildingImportView(BaseCatalogImportView):
+    entity = CatalogImportLog.Entity.BUILDING
     success_url = reverse_lazy("catalog:building-list")
-    success_message = _("Здание сохранено и отправлено на модерацию.")
+    success_message = _("Импорт зданий завершён.")
+    page_title = _("Импорт зданий")
+    page_subtitle = _("Загрузите файл CSV или XLSX, чтобы добавить или обновить здания.")
+    expected_columns = (
+        ("address", _("Адрес (обязательно)")),
+        ("entrance", _("Подъезд")),
+        ("notes", _("Примечания")),
+    )
+
+    def get_preview(self, uploaded_file) -> CatalogImportPreview:
+        return build_building_preview(uploaded_file)
+
+    def run_import(self, rows: Sequence[dict[str, Any]]) -> CatalogImportResult:
+        return import_buildings(rows, self.request.user)
 
 
-class BuildingUpdateView(CatalogFormMixin, UpdateView):
-    model = Building
-    form_class = BuildingForm
-    template_name = "catalog/building_form.html"
-    success_url = reverse_lazy("catalog:building-list")
-    success_message = _("Изменения сохранены. Запись будет отображаться после утверждения администратора.")
-
-
-class ElevatorCreateView(CatalogFormMixin, CreateView):
-    model = Elevator
-    form_class = ElevatorForm
-    template_name = "catalog/elevator_form.html"
+class ElevatorImportView(BaseCatalogImportView):
+    entity = CatalogImportLog.Entity.ELEVATOR
     success_url = reverse_lazy("catalog:elevator-list")
-    success_message = _("Лифт сохранён и отправлен на модерацию.")
+    success_message = _("Импорт лифтов завершён.")
+    page_title = _("Импорт лифтов")
+    page_subtitle = _(
+        "Используйте файл CSV или XLSX для массового добавления лифтов. Здание должно существовать заранее."
+    )
+    expected_columns = (
+        ("building_address", _("Адрес здания (обязательно)")),
+        ("building_entrance", _("Подъезд")),
+        ("identifier", _("Идентификатор лифта (обязательно)")),
+        ("status", _("Статус")),
+        ("description", _("Описание")),
+    )
 
-    def get_form_kwargs(self):  # type: ignore[override]
-        kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
-        return kwargs
+    def get_preview(self, uploaded_file) -> CatalogImportPreview:
+        return build_elevator_preview(uploaded_file)
+
+    def run_import(self, rows: Sequence[dict[str, Any]]) -> CatalogImportResult:
+        return import_elevators(rows, self.request.user)
 
 
-class ElevatorUpdateView(CatalogFormMixin, UpdateView):
-    model = Elevator
-    form_class = ElevatorForm
-    template_name = "catalog/elevator_form.html"
-    success_url = reverse_lazy("catalog:elevator-list")
-    success_message = _("Изменения лифта сохранены. После подтверждения они будут доступны аудиторам.")
-
-    def get_form_kwargs(self):  # type: ignore[override]
-        kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
-        return kwargs
+__all__ = [
+    "BuildingCreateView",
+    "BuildingDeleteView",
+    "BuildingImportView",
+    "BuildingListView",
+    "BuildingUpdateView",
+    "ElevatorCreateView",
+    "ElevatorDeleteView",
+    "ElevatorImportView",
+    "ElevatorListView",
+    "ElevatorUpdateView",
+]

@@ -66,5 +66,18 @@ class ElevatorForm(BootstrapFormMixin, forms.ModelForm):
             )
         self.fields["status"].choices = Elevator.Status.choices
         self.fields["status"].help_text = _(
-            "Выберите текущее состояние лифта. После утверждения администратором статус будет доступен всем аудиторам."
+            "Выберите текущее состояние лифта. Значение можно изменить в любой момент."
         )
+        self.fields["building"].empty_label = _("Выберите здание")
+
+
+class CatalogImportUploadForm(BootstrapFormMixin, forms.Form):
+    file = forms.FileField(
+        label=_("Файл импорта"),
+        help_text=_("Поддерживаются файлы CSV и XLSX."),
+    )
+
+
+class CatalogImportConfirmForm(forms.Form):
+    payload = forms.CharField(widget=forms.HiddenInput)
+    filename = forms.CharField(widget=forms.HiddenInput)
