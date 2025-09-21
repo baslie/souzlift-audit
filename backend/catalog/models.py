@@ -246,4 +246,79 @@ class Elevator(ModerationMixin, models.Model):
             raise ValidationError({"identifier": _("Необходимо указать идентификатор лифта.")})
 
 
-__all__ = ["ReviewStatus", "Building", "Elevator", "ModeratedQuerySet", "ModeratedManager"]
+class CatalogImportLog(models.Model):
+    """Audit trail for catalog import attempts."""
+
+    class Entity(models.TextChoices):
+        BUILDING = "building", _("Здания")
+        ELEVATOR = "elevator", _("Лифты")
+
+    class Status(models.TextChoices):
+        SUCCESS = "success", _("Успешно")
+        FAILED = "failed", _("Ошибка")
+
+    entity = models.CharField(
+        _("Справочник"),
+        max_length=20,
+        choices=Entity.choices,
+    )
+    status = models.CharField(
+        _("Статус"),
+        max_length=20,
+        choices=Status.choices,
+    )
+    filename = models.CharField(
+        _("Имя файла"),
+        max_length=255,
+    )
+    created_at = models.DateTimeField(
+        _("Дата запуска"),
+        auto_now_add=True,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="catalog_imports",
+        verbose_name=_("Инициатор"),
+    )
+    total_rows = models.PositiveIntegerField(
+        _("Всего строк"),
+        default=0,
+    )
+    created_count = models.PositiveIntegerField(
+        _("Создано"),
+        default=0,
+    )
+    updated_count = models.PositiveIntegerField(
+        _("Обновлено"),
+        default=0,
+    )
+    error_rows = models.JSONField(
+        _("Ошибки"),
+        default=list,
+        blank=True,
+    )
+    message = models.TextField(
+        _("Комментарий"),
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = _("Журнал импорта справочников")
+        verbose_name_plural = _("Журналы импорта справочников")
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable representation
+        return f"{self.get_entity_display()} · {self.filename}"
+
+
+__all__ = [
+    "ReviewStatus",
+    "Building",
+    "Elevator",
+    "CatalogImportLog",
+    "ModeratedQuerySet",
+    "ModeratedManager",
+]

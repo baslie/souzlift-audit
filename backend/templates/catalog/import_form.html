@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% load catalog_tags %}
+{% block title %}{{ page_title }} · Союзлифт Аудит{% endblock %}
+{% block heading %}{{ page_title }}{% endblock %}
+{% block subheading %}
+  <p class="mb-0 text-body-secondary">{{ page_subtitle }}</p>
+{% endblock %}
+{% block content %}
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <section class="mb-4">
+        <h2 class="h5 mb-3">1. Загрузите файл</h2>
+        {% if expected_columns %}
+          <p class="text-body-secondary small mb-2">Подготовьте таблицу со следующими столбцами:</p>
+          <ul class="text-body-secondary small mb-3">
+            {% for key, label in expected_columns %}
+              <li><strong>{{ label }}</strong></li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        <form method="post" enctype="multipart/form-data" class="d-flex flex-column gap-3">
+          {% csrf_token %}
+          {% for field in upload_form %}
+            <div>
+              <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}
+                {{ field.help_text|safe }}
+              {% endif %}
+              {% if field.errors %}
+                <div class="invalid-feedback d-block">{{ field.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+          <div>
+            <button type="submit" class="btn btn-primary">Предпросмотр</button>
+          </div>
+        </form>
+      </section>
+
+      {% if preview %}
+        <section class="mb-4">
+          <h2 class="h5 mb-3">2. Предпросмотр</h2>
+          <p class="text-body-secondary mb-3">
+            Файл: <strong>{{ preview.filename }}</strong>. Найдено строк: {{ preview.total_rows }}.
+            Готово к импорту: {{ preview.valid_rows|length }}.
+            С ошибками: {{ preview.error_rows|length }}.
+          </p>
+          {% if preview.rows %}
+            <div class="table-responsive mb-3">
+              <table class="table table-sm align-middle">
+                <thead class="table-light">
+                  <tr>
+                    {% for key, label in expected_columns %}
+                      <th scope="col">{{ label }}</th>
+                    {% endfor %}
+                    <th scope="col">Ошибки</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in preview.rows %}
+                    <tr class="{% if row.errors %}table-danger{% endif %}">
+                      {% for key, label in expected_columns %}
+                        <td>{{ row.data|dict_get:key }}</td>
+                      {% endfor %}
+                      <td>
+                        {% if row.errors %}
+                          <ul class="mb-0 small text-danger">
+                            {% for error in row.errors %}
+                              <li>{{ error }}</li>
+                            {% endfor %}
+                          </ul>
+                        {% else %}
+                          <span class="text-body-tertiary">—</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+          {% if preview.valid_rows %}
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              {{ confirm_form.payload }}
+              {{ confirm_form.filename }}
+              <button type="submit" class="btn btn-success">Импортировать {{ preview.valid_rows|length }} строк</button>
+            </form>
+          {% else %}
+            <p class="text-body-secondary">Все строки содержат ошибки. Исправьте файл и повторите попытку.</p>
+          {% endif %}
+        </section>
+      {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+      <section class="mb-4">
+        <h2 class="h6 mb-3">Последние импорты</h2>
+        {% if logs %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">Дата</th>
+                  <th scope="col">Файл</th>
+                  <th scope="col">Статус</th>
+                  <th scope="col">Строки</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for log in logs %}
+                  <tr>
+                    <td class="small text-body-secondary">{{ log.created_at|date:"d.m.Y H:i" }}</td>
+                    <td class="small">{{ log.filename }}</td>
+                    <td>
+                      {% if log.status == 'success' %}
+                        <span class="badge text-bg-success">Успешно</span>
+                      {% else %}
+                        <span class="badge text-bg-danger">Ошибка</span>
+                      {% endif %}
+                    </td>
+                    <td class="small">
+                      <div>Всего: {{ log.total_rows }}</div>
+                      <div>Создано: {{ log.created_count }}</div>
+                      <div>Обновлено: {{ log.updated_count }}</div>
+                      {% if log.error_rows %}
+                        <details class="mt-2">
+                          <summary class="small text-danger">Ошибки ({{ log.error_rows|length }})</summary>
+                          <ul class="mt-2 small text-body-secondary">
+                            {% for error in log.error_rows %}
+                              <li>Строка {{ error|dict_get:'row_number' }}: {{ error|dict_get:'message' }}</li>
+                            {% endfor %}
+                          </ul>
+                        </details>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-body-secondary">Журнал ещё пуст. После импорта здесь появится история запусков.</p>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+{% endblock %}
